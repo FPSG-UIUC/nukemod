@@ -35,6 +35,7 @@
 #include <linux/syscalls.h>
 #include <linux/timer.h>
 #include <linux/atomic.h>
+#include <linux/delay.h>
 
 #include "nuke_mod.h"
 #include "util.h"
@@ -176,6 +177,9 @@ static long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned lon
 	case IOCTL_APPEND_ADDR:
 		device_write(file, (char *)ioctl_param, i, 0, APPEND_ADDR);
 		break;
+	case IOCTL_PASS_SPECIAL_ADDR:
+		device_write(file, (char *)ioctl_param, i, 0, PASS_SPECIAL_ADDR);
+		break;
 	case IOCTL_START_MONITORING:
 		device_write(file, (char *)ioctl_param, i, 0, START_MONITORING);
 		break;
@@ -275,9 +279,9 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 				// Ensure the special page page faults at its next access
 				if (fault_cnt == 1) {
-					if (pte_present(*(special->nuke_pte)))
-						special->nuke_pte = pte_clear_flags(*(special->nuke_pte), _PAGE_PRESENT);
-					__flush_tlb_single(special->nuke_virtual_addr);
+					if (pte_present(*(special.nuke_pte)))
+						special.nuke_pte = pte_clear_flags(*(special.nuke_pte), _PAGE_PRESENT);
+					__flush_tlb_single(special.nuke_virtual_addr);
 				}
 				
 				// Check threshold
@@ -289,7 +293,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					msleep(3000);
 				}
 
-			} else if (v0 == pte_pfn(*(special->nuke_pte))) {
+			} else if (v0 == pte_pfn(*(special.nuke_pte))) {
 				fault_cnt = 0;
 				pr_info("Page fault count %d", fault_cnt);
 
