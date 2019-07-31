@@ -119,7 +119,7 @@ void store_nuked_address(struct nuke_info_t **head, uint64_t address)
 	spinlock_t *ptlp;
 
 	// Fill the struct with the information about the address
-	struct nuke_info_t *node = kmalloc(sizeof(*node));
+	struct nuke_info_t *node = kmalloc(sizeof(*node), GFP_KERNEL);
 	node->nuke_virtual_addr = address;
 	node->next = NULL;
 	node->nuke_mm = current->mm;
