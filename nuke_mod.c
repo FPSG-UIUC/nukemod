@@ -312,7 +312,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 /*
  * init_mudule registers the device and the trampoline kprobes code
  */
-static int init_module()
+int init_module()
 {
 	int ret_val;
 
@@ -344,7 +344,7 @@ static int init_module()
 /*
  * cleanup_module unregisters the device, the probes, and disables the attack
  */
-static void cleanup_module()
+void cleanup_module()
 {
 	unregister_chrdev(MAJOR_NUM, DEVICE_NAME);
 	unregister_kprobe(&kp);
