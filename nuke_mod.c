@@ -52,7 +52,7 @@ static int Device_Open = 0;
 // NOTE: notify_attack is actually a function we added to the 
 // kernel and that is why microscope requires a custom kernel.
 static struct kprobe kp = {
-	.symbol_name = "check_attack",
+	.symbol_name = "notify_attack",
 };
 
 // Microscope variables
