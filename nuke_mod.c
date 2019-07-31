@@ -161,7 +161,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
  * MONITOR_ADDR - Pass the base monitor address (e.g. the AES Td tables), we will search for the actual one
  * PREP_PF - Set up the replay mechanism through page faults.
  */
-static long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
+long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
 {
 	int i = 0;
 	char *temp;
