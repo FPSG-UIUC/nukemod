@@ -276,7 +276,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 				// Count fault
 				fault_cnt++;
-				pr_info("Page fault count %" PRIu64, fault_cnt);
+				pr_info("Page fault count %lld", fault_cnt);
 
 				// Ensure the special page page faults at its next access
 				if (fault_cnt == 1) {
@@ -296,7 +296,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 			} else if (v0 == pte_pfn(*(special.nuke_pte))) {
 				fault_cnt = 0;
-				pr_info("Page fault count %" PRIu64, fault_cnt);
+				pr_info("Page fault count %lld", fault_cnt);
 
 				// Clear stored addresses if present
 				struct nuke_info_t *tmp = nuke_info_head;
