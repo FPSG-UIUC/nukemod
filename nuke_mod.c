@@ -99,6 +99,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	uint64_t address;
 	char write_str[BUF_LEN];
 	char *write_str_ptr;
+	spinlock_t *ptlp;
 
 	// Store user space buffer variable (representing the address) into write_str
 	for (i = 0; i < length && i < BUF_LEN; i++)
@@ -122,7 +123,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	case PASS_SPECIAL_ADDR:
 		pr_info("Storing special addr %p\n", (void *)address);
         
-		spinlock_t *ptlp;
 		special.nuke_virtual_addr = address;
 		special.nuke_mm = current->mm;
 		do_page_walk(special.nuke_mm, address, &(special.nuke_pte), &ptlp);
@@ -275,12 +275,12 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 				// Count fault
 				fault_cnt++;
-				pr_info("Page fault count %d", fault_cnt);
+				pr_info("Page fault count %" PRIu64, fault_cnt);
 
 				// Ensure the special page page faults at its next access
 				if (fault_cnt == 1) {
 					if (pte_present(*(special.nuke_pte)))
-						special.nuke_pte = pte_clear_flags(*(special.nuke_pte), _PAGE_PRESENT);
+						*(special.nuke_pte) = pte_clear_flags(*(special.nuke_pte), _PAGE_PRESENT);
 					__flush_tlb_single(special.nuke_virtual_addr);
 				}
 				
@@ -295,13 +295,13 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 			} else if (v0 == pte_pfn(*(special.nuke_pte))) {
 				fault_cnt = 0;
-				pr_info("Page fault count %d", fault_cnt);
+				pr_info("Page fault count %" PRIu64, fault_cnt);
 
 				// Clear stored addresses if present
 				struct nuke_info_t *tmp = nuke_info_head;
 				while(tmp != NULL) {
 					if (pte_present(*(tmp->nuke_pte)))
-						tmp->nuke_pte = pte_clear_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
+						*(tmp->nuke_pte) = pte_clear_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
 					__flush_tlb_single(tmp->nuke_virtual_addr);
 				}
 			}
