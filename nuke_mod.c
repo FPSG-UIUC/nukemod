@@ -55,12 +55,12 @@ static struct kprobe kp = {
 
 // Microscope variables
 extern pte_t *fault_pte;
-static uint64_t fault_fault_cnt = 0;
+static uint64_t fault_cnt = 0, fault_fault_cnt = 0;
 
 // APA variables
+static struct nuke_info_t special;
 static struct nuke_info_t *nuke_info_head = NULL;
 static uint8_t monitoring = 0, done = 0;
-static atomic_t fault_cnt = ATOMIC_INIT(1);
 
 //region IOCTL Functions
 //---------------------------------------------------------------------------------------
@@ -116,6 +116,16 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	case APPEND_ADDR:
 		pr_info("Storing addr %p\n", (void *)address);
         store_nuked_address(&nuke_info_head, address);
+        break;
+	
+	case PASS_SPECIAL_ADDR:
+		pr_info("Storing special addr %p\n", (void *)address);
+        
+		spinlock_t *ptlp;
+		special.nuke_virtual_addr = address;
+		special.nuke_mm = current->mm;
+		do_page_walk(special.nuke_mm, address, &(special.nuke_pte), &ptlp);
+
         break;
 		
 	case START_MONITORING:
@@ -214,7 +224,6 @@ static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
 	}
 
     // Mark attack as off
-	set_attack_value(NULL, 0);
 	pr_info("Nuke_mod: Fault-on-Fault. Attack failed %llu. Remove nuke_mod and restart.\n", fault_cnt);
 
 	// We let the kprobe handler to handle the page fault
@@ -227,13 +236,15 @@ static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
  */
 static int pre_handler(struct kprobe *p, struct pt_regs *regs) { return 0; }
 
-static int pte_in_list(int v0) {
+static int pte_in_list(int v0) 
+{
 	// Loop over list of addresses
-	struct nuke_info_t *current = nuke_info_head;
-	while(current != NULL) {
+	int v1;
+	struct nuke_info_t *tmp = nuke_info_head;
+	while(tmp != NULL) {
 
-		// Check if current is the one we want
-		v1 = pte_pfn(*(current->nuke_pte));
+		// Check if tmp is the one we want
+		v1 = pte_pfn(*(tmp->nuke_pte));
 		if (v0 == v1) {
 			return 1;
 		}
@@ -283,11 +294,11 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 				pr_info("Page fault count %d", fault_cnt);
 
 				// Clear stored addresses if present
-				struct nuke_info_t *current = nuke_info_head;
-				while(current != NULL) {
-					if (pte_present(*(current->nuke_pte)))
-						current->nuke_pte = pte_clear_flags(*(current->nuke_pte), _PAGE_PRESENT);
-					__flush_tlb_single(current->nuke_virtual_addr);
+				struct nuke_info_t *tmp = nuke_info_head;
+				while(tmp != NULL) {
+					if (pte_present(*(tmp->nuke_pte)))
+						tmp->nuke_pte = pte_clear_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
+					__flush_tlb_single(tmp->nuke_virtual_addr);
 				}
 			}
 		}
@@ -321,12 +332,6 @@ static int init_module()
 		return ret_val;
 	}
 
-    // Setup microscope variables
-	ptr_info = &the_info[0];
-	ptr_info->error = 0;
-
-	// Disable debug prints in memory.c
-	set_print_msg_attack(0);
 	pr_info("Nuke module loaded. If a channel does not exist run: mknod %s c %d 0\n", DEVICE_FILE_NAME, MAJOR_NUM);
 
 	return 0;
@@ -339,6 +344,4 @@ static void cleanup_module()
 {
 	unregister_chrdev(MAJOR_NUM, DEVICE_NAME);
 	unregister_kprobe(&kp);
-	set_print_msg_attack(0);
-	set_attack_value(NULL, 0);
 }
