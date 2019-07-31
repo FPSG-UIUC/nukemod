@@ -201,7 +201,7 @@ static long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned lon
  * Ioctl operations struct - defines the supported operations
  * Ioctl code is mainly from: https://linux.die.net/lkmpg/x892.html
  */
-static struct file_operations Fops = {
+struct file_operations Fops = {
 	.unlocked_ioctl = device_ioctl,
 	.open = device_open,
 	.release = device_release,
