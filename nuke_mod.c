@@ -34,6 +34,7 @@
 #include <linux/swapops.h>
 #include <linux/syscalls.h>
 #include <linux/timer.h>
+#include <linux/types.h>
 #include <linux/atomic.h>
 #include <linux/delay.h>
 
