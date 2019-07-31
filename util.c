@@ -41,7 +41,7 @@ MODULE_LICENSE("GPL v2");
 //region List utility functions
 //---------------------------------------------------------------------------------------
 
-static void append(struct nuke_info_t **head, struct nuke_info_t *new_node)
+void append(struct nuke_info_t **head, struct nuke_info_t *new_node)
 {
 	new_node->next = NULL; // important
 
@@ -119,7 +119,7 @@ void store_nuked_address(struct nuke_info_t **head, uint64_t address)
 	spinlock_t *ptlp;
 
 	// Fill the struct with the information about the address
-	struct nuke_info_t *node = malloc(sizeof(*node));
+	struct nuke_info_t *node = kmalloc(sizeof(*node));
 	node->nuke_virtual_addr = address;
 	node->next = NULL;
 	node->nuke_mm = current->mm;
@@ -135,11 +135,11 @@ void store_nuked_address(struct nuke_info_t **head, uint64_t address)
 void clean_up_stored_addresses(struct nuke_info_t **head)
 {
 	// Clean up
-	struct nuke_info_t *current, *tmp;
-	current = *head;
-	while(current != NULL) {
-		tmp = current;
-		current = current->next;
+	struct nuke_info_t *curr, *tmp;
+	curr = *head;
+	while(curr != NULL) {
+		tmp = curr;
+		curr = curr->next;
 		free(tmp);
 	}
 }

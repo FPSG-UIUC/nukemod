@@ -260,9 +260,7 @@ static int pte_in_list(int v0)
 
 static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 {
-	uint64_t old_time = 0, wait_time = 0;
-	uint64_t v0 = 0, v1 = 0, access_time = 0;
-	int i;
+	uint64_t v0 = 0;
 
     // fault_pte is set in the kernel (that's why it's extern here)
 	if (fault_pte) {
