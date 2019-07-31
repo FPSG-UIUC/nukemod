@@ -3,7 +3,7 @@
 
 #include <linux/ioctl.h>
 
-#define MAJOR_NUM 1313
+#define MAJOR_NUM 1314
 
 #define IOCTL_APPEND_ADDR _IOR(MAJOR_NUM, 0, char *)
 
