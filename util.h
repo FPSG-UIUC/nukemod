@@ -1,17 +1,3 @@
-/*
- * Author: Dimitrios Skarlatos
- * Contact: skarlat2@illinois.edu - http://skarlat2.web.engr.illinois.edu/
- *
- * util.h contains the definition of all the required utility functions
- * to perform the replay attack. The functions include:
- * 1) tracking page tables of a requested virtual address
- * 2) perform the nuke which completly flushes all
- * the page table entries and data from the caches for a specified address.
- * 3) create kernel level mapping to process level memory
- * 4) perform a flush+reload side channel
- * 5) other utility functions used for the attack
-*/
-
 #ifndef UTIL_H
 #define UTIL_H
 
@@ -47,25 +33,11 @@
 
 #define DEBUG 1
 
-/*
- * attack_info is a utility struct that maintains all the necessary
- * information to perform the attack. Not all fields are used for
- * poc_v0.
- */
-struct attack_info {
-  uint64_t nuke_addr;                 // VA to be nuked of the victim process
-  struct task_struct *nuke_tsk;       // task_struct of the victim
-  pid_t nuke_pid;                     // pid of the victim
-  struct mm_struct *nuke_mm;          // mm_struct of the victim
-  struct vm_area_struct *monitor_vma; // vma of the monitor
-  uint64_t monitor_addr[64];          // VA to be monitored currently
-  uint64_t monitor_addr_start[64];    // VA to be monitored
-  void *monitor_kaddr[64];            // Kernel mapping of the monitor_addr
-  struct page *monitor_page[64];      // the page of the monitor_addr
-  pte_t *nuke_ptep;
-  spinlock_t **ptlp; // splinlock used for locking page table entries
-  uint32_t error;    // used to track errors at different stages
-  uint32_t monitors;
+struct nuke_info_t {
+	uint64_t nuke_virtual_addr; // virtual address of the data we are monitoring
+	struct mm_struct *nuke_mm;  // mm_struct of the victim
+	pte_t *nuke_pte;			      // pte of the nuke virtual address
+	struct nuke_info_t *next;
 };
 
 /******************************************************/
@@ -132,25 +104,10 @@ int set_pf_status(int val);
  * functions implemented in the util.c
  */
 
-uint64_t do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock_t **ptlp);
-
-void setup_nuke_structs(struct attack_info *info, uint64_t address);
-void setup_monitor_structs(struct attack_info *info, uint64_t address, uint32_t index);
-
-void pf_prep(struct attack_info *info, uint64_t address, uint32_t tot_monitor);
-void pf_prep_lockless(struct attack_info *info, uint64_t address);
-void pf_redo(struct attack_info *info, uint64_t address);
-void cause_long_latency(struct attack_info *info, uint64_t address);
-
-int nuke_lock(struct mm_struct *mm, uint64_t address, spinlock_t **ptlp, int present);
-int nuke_lockless(struct mm_struct *mm, uint64_t address, int present);
-int nuke_lockless_partial(struct mm_struct *mm, uint64_t address, int present);
-
-void print_info(struct attack_info *info);
-
-void asm_clflush(uint64_t addr);
-uint32_t asm_cctime(uint64_t addr);
-uint64_t check_side_channel_single(uint64_t address, uint32_t index);
+static void append(struct nuke_info_t **head, struct nuke_info_t *new_node);
+int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock_t **ptlp);
+void store_nuked_address(struct nuke_info_t **head, uint64_t address);
+void clean_up_stored_addresses(struct nuke_info_t **head);
 
 /******************************************************/
 #endif

