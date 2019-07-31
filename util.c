@@ -140,7 +140,7 @@ void clean_up_stored_addresses(struct nuke_info_t **head)
 	while(curr != NULL) {
 		tmp = curr;
 		curr = curr->next;
-		free(tmp);
+		kfree(tmp);
 	}
 }
 
