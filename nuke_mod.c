@@ -121,7 +121,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	case APPEND_ADDR:
 		pr_info("Storing addr %p\n", (void *)address);
         store_nuked_address(&nuke_info_head, address);
-		pr_info("1");
         break;
 	
 	case PASS_SPECIAL_ADDR:
