@@ -43,28 +43,19 @@ MODULE_LICENSE("GPL v2");
 
 void append(struct nuke_info_t **head, struct nuke_info_t *new_node)
 {
-	pr_info("1");
-
 	struct nuke_info_t *cursor;
 	new_node->next = NULL; // important
-
-	pr_info("2");
 
 	/* new_node becomes head if head is empty */
 	if (*head == NULL) {
 		*head = new_node;
-		pr_info("AAA");
 		return;
 	}
-
-	pr_info("3");
 
 	/* go to the last node */
 	cursor = *head;
 	while(cursor->next != NULL)
 		cursor = cursor->next;
-
-	pr_info("4");
 
 	/* append new node */
 	cursor->next = new_node;
