@@ -144,14 +144,14 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 
 	case WAIT:
-		spin_lock(lock_for_waiting);
+		spin_lock(&lock_for_waiting);
 		if (done == 1) {
 			pr_info("Letting thread 0 continue");
 			done = 0;
-			spin_unlock(lock_for_waiting);
+			spin_unlock(&lock_for_waiting);
 		} else {
 			pr_info("Waiting for magic batch to happen on thread 0");
-			spin_unlock(lock_for_waiting);
+			spin_unlock(&lock_for_waiting);
 			while (done != 1) {;;}
 		}
 		break;
