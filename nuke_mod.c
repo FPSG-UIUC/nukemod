@@ -29,6 +29,7 @@
 #include <linux/pid.h>
 #include <linux/rmap.h>
 #include <linux/sched.h>
+#include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/swap.h>
 #include <linux/swapops.h>
@@ -62,7 +63,8 @@ static uint64_t fault_cnt = 0, fault_fault_cnt = 0;
 // APA variables
 static struct nuke_info_t special;
 static struct nuke_info_t *nuke_info_head = NULL;
-static uint8_t monitoring = 0, done = 0;
+static uint8_t monitoring = 0, done = 1;
+static DEFINE_SPINLOCK(lock_for_waiting);
 
 //region IOCTL Functions
 //---------------------------------------------------------------------------------------
@@ -142,8 +144,16 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 
 	case WAIT:
-		pr_info("Waiting for magic batch to happen on thread 0");
-		while (done != 1) {;;}
+		spin_lock(lock_for_waiting);
+		if (done == 1) {
+			pr_info("Letting thread 0 continue");
+			done = 0;
+			spin_unlock(lock_for_waiting);
+		} else {
+			pr_info("Waiting for magic batch to happen on thread 0");
+			spin_unlock(lock_for_waiting);
+			while (done != 1) {;;}
+		}
 		break;
 
 	default:
