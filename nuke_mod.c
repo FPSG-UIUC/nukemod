@@ -271,6 +271,7 @@ static int pte_in_list(int v0)
 static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 {
 	uint64_t v0 = 0;
+	pr_info("Invoked fault handler %lld", fault_cnt);
 
     // fault_pte is set in the kernel (that's why it's extern here)
 	if (fault_pte) {
