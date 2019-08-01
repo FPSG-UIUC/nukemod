@@ -73,17 +73,23 @@ int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock
 	pud_t *pud;
 	pmd_t *pmd;
 
+	pr_info("A");
+
 	pgd = pgd_offset(mm, address);
 	if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd))) {
 		pr_info("do_page_walk: pgd_offset failed");
 		goto out;
 	}
 
+	pr_info("B");
+
 	pud = pud_offset(pgd, address);
 	if (pud_none(*pud) || unlikely(pud_bad(*pud))) {
 		pr_info("do_page_walk: pud_offset failed");
 		goto out;
 	}
+
+	pr_info("C");
 
 	pmd = pmd_offset(pud, address);
 	VM_BUG_ON(pmd_trans_huge(*pmd)); // We do not handle huge pages for now
@@ -92,16 +98,22 @@ int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock
 		goto out;
 	}
 
+	pr_info("D");
+
 	*ptepp = pte_offset_map_lock(mm, pmd, address, ptlp);
 	if (!(*ptepp)) {
 		pr_info("do_page_walk: pte_offset_map_lock failed");
 		goto out;
 	}
 
+	pr_info("E");
+
 	if (!pte_present(**ptepp)) {
 		pr_info("do_page_walk: page is not present, aborting.");
 		goto unlock;
 	}
+
+	pr_info("F");
 
 	**ptepp = pte_clear_flags(**ptepp, _PAGE_PRESENT);
 	__flush_tlb_single(address);
@@ -119,15 +131,24 @@ void store_nuked_address(struct nuke_info_t **head, uint64_t address)
 {
 	spinlock_t *ptlp;
 
+	pr_info("1");
+
 	// Fill the struct with the information about the address
 	struct nuke_info_t *node = kmalloc(sizeof(*node), GFP_KERNEL);
+
+	pr_info("2");
+
 	node->nuke_virtual_addr = address;
 	node->next = NULL;
 	node->nuke_mm = current->mm;
 
+	pr_info("3");
+
 	// Flush the item from the TLB
 	// Clear the present bit so that we know we will have a page fault
 	do_page_walk(node->nuke_mm, address, &(node->nuke_pte), &ptlp);
+
+	pr_info("4");
 	
 	// Append the struct to the list
 	append(head, node);
