@@ -41,6 +41,7 @@ struct nuke_info_t {
 };
 
 void append(struct nuke_info_t **head, struct nuke_info_t *new_node);
+void arbitrarily_cause_page_fault(pte_t **ptepp, unsigned long addr);
 int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock_t **ptlp);
 void store_nuked_address(struct nuke_info_t **head, uint64_t address);
 void clean_up_stored_addresses(struct nuke_info_t **head);
