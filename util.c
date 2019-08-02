@@ -38,11 +38,6 @@
 
 MODULE_LICENSE("GPL v2");
 
-static inline void my_flush_tlb_singlepage(unsigned long addr)
-{
-    asm volatile("invlpg (%0)" ::"r" (addr) : "memory");
-}
-
 //region List utility functions
 //---------------------------------------------------------------------------------------
 
@@ -71,6 +66,23 @@ void append(struct nuke_info_t **head, struct nuke_info_t *new_node)
 
 //region Microscope utility functions
 //---------------------------------------------------------------------------------------
+
+static inline void my_flush_tlb_singlepage(unsigned long addr)
+{
+    asm volatile("invlpg (%0)" ::"r" (addr) : "memory");
+}
+
+void arbitrarily_cause_page_fault(pte_t **ptepp, unsigned long addr)
+{
+	pte_t pte, temp_pte;
+    pte = **ptepp;
+    if((pte_flags(pte) & _PAGE_PRESENT)) {
+        temp_pte = pte_clear_flags(pte, _PAGE_PRESENT);
+        temp_pte = pte_set_flags(temp_pte, _PAGE_PROTNONE);
+        set_pte(*ptepp, temp_pte);
+        my_flush_tlb_singlepage(address);
+    }
+}
 
 int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock_t **ptlp)
 {
@@ -108,20 +120,7 @@ int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock
 		goto unlock;
 	}
 
-    //pte_clear(mm, address, *ptepp);
-	//**ptepp = pte_clear_flags(**ptepp, _PAGE_PRESENT);
-    //set_pte(*ptepp, __pte(0x0));
-	//**ptepp = pte_set_flags(**ptepp, RESERVED_BIT);
-    pte_t pte, temp_pte;
-    pte = **ptepp;
-    if((pte_flags(pte) & _PAGE_PRESENT)) {
-        temp_pte = pte_clear_flags(pte, _PAGE_PRESENT);
-        temp_pte = pte_set_flags(temp_pte, _PAGE_PROTNONE);
-        set_pte(*ptepp, temp_pte);
-        my_flush_tlb_singlepage(address);
-    }
-
-    //__flush_tlb_single(address);
+    arbitrarily_cause_page_fault(ptepp, address);
 
 	pte_unmap_unlock(*ptepp, *ptlp);
 

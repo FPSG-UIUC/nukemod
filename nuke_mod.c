@@ -285,51 +285,60 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 		// Note that this does not handle multi-threading
 		if (monitoring == 1) {
 
-			// Check if the pte of the current page fault is of interest
+			// Check if the pte of the current page fault could be of interest
 			v0 = pte_pfn(*faulting_pte);
             v1 = pte_pfn(*(special.nuke_pte));
 			if (pte_in_list(v0) == 1) {
 
+				// Check if the pte of the current page fault is of the stored addresses
                 if(!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
-                    pr_info("Match bit!\n");
-                    temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
-                    set_pte(faulting_pte, temp_pte);
 
 					// Count fault
                 	fault_cnt++;
+                    pr_info("Stored address page fault %lld\n", fault_cnt);
+
+					// Undo arbitrarily caused page fault
+                    temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
+                    set_pte(faulting_pte, temp_pte);
+
+					// Ensure the special page faults at its next access
+					if (fault_cnt == 1) {
+						arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
+					}
+
+					// Check threshold
+					if (fault_cnt > 24) {
+						monitoring = 0;
+						done = 1;
+						pr_info("Putting thread 0 to sleep and waking up other threads now");
+
+						msleep(3000);
+					}
                 }
-
-				// Ensure the special page page faults at its next access
-				//if (fault_cnt == 1) {
-					//if (pte_present(*(special.nuke_pte)))
-					//	*(special.nuke_pte) = pte_clear_flags(*(special.nuke_pte), _PAGE_PRESENT);
-				//	__flush_tlb_single(special.nuke_virtual_addr);
-				//}
-				
-				// Check threshold
-				//if (fault_cnt > 24) {
-				//	monitoring = 0;
-				//	done = 1;
-				//	pr_info("Putting thread 0 to sleep and waking up other threads now");
-
-					//msleep(3000);
-				//}
 
 		    } else if (v0 == v1) {
 				
-		        pr_info("Page fault reset after %lld\n", fault_cnt);
-				fault_cnt = 0;
+				// Check if the pte of the current page fault is of the special addresses
+                if(!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
 
-				// Clear stored addresses if present
-				//struct nuke_info_t *tmp = nuke_info_head;
-				//while(tmp != NULL) {
-					//if (pte_present(*(tmp->nuke_pte)))
-					//	*(tmp->nuke_pte) = pte_clear_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
-				//	__flush_tlb_single(tmp->nuke_virtual_addr);
-				//}
+					// Reset counter
+					fault_cnt = 0;
+                    pr_info("Model address page fault: resetting counter\n");
+
+					// Undo arbitrarily caused page fault
+                    temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
+                    set_pte(faulting_pte, temp_pte);
+
+					// Ensure the stored addresses page fault at their next access
+					if (fault_cnt == 1) {
+						struct nuke_info_t *tmp = nuke_info_head;
+						while(tmp != NULL) {
+							arbitrarily_cause_page_fault(&(tmp->nuke_pte), tmp->nuke_virtual_addr);
+							tmp = tmp->next;
+						}
+					}
+                }
 			}
-
-          //  pr_info("Outside!");
 		}
 	}
 }
