@@ -86,40 +86,8 @@ void arbitrarily_cause_page_fault(pte_t **ptepp, unsigned long addr)
 
 int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock_t **ptlp)
 {
-	pgd_t *pgd;
-	pud_t *pud;
-	pmd_t *pmd;
-
-	pgd = pgd_offset(mm, address);
-	if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd))) {
-		pr_info("do_page_walk: pgd_offset failed");
-		goto out;
-	}
-
-	pud = pud_offset(pgd, address);
-	if (pud_none(*pud) || unlikely(pud_bad(*pud))) {
-		pr_info("do_page_walk: pud_offset failed");
-		goto out;
-	}
-
-	pmd = pmd_offset(pud, address);
-	VM_BUG_ON(pmd_trans_huge(*pmd)); // We do not handle huge pages for now
-	if (pmd_none(*pmd) || unlikely(pmd_bad(*pmd))) {
-		pr_info("do_page_walk: pmd_offset failed");
-		goto out;
-	}
-
-	*ptepp = pte_offset_map_lock(mm, pmd, address, ptlp);
-	if (!(*ptepp)) {
-		pr_info("do_page_walk: pte_offset_map_lock failed");
-		goto out;
-	}
-
-	if (!pte_present(**ptepp)) {
-		pr_info("do_page_walk: page is not present, aborting.");
-		goto unlock;
-	}
-
+	unsigned int level;
+	*pte = lookup_address(address, &level);
     arbitrarily_cause_page_fault(ptepp, address);
 
 	pte_unmap_unlock(*ptepp, *ptlp);
