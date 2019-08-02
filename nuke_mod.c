@@ -330,12 +330,10 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
                     set_pte(faulting_pte, temp_pte);
 
 					// Ensure the stored addresses page fault at their next access
-					if (fault_cnt == 1) {
-						struct nuke_info_t *tmp = nuke_info_head;
-						while(tmp != NULL) {
-							arbitrarily_cause_page_fault(&(tmp->nuke_pte), tmp->nuke_virtual_addr);
-							tmp = tmp->next;
-						}
+					struct nuke_info_t *tmp = nuke_info_head;
+					while(tmp != NULL) {
+						arbitrarily_cause_page_fault(&(tmp->nuke_pte), tmp->nuke_virtual_addr);
+						tmp = tmp->next;
 					}
                 }
 			}
