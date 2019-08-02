@@ -80,7 +80,7 @@ void arbitrarily_cause_page_fault(pte_t **ptepp, unsigned long addr)
         temp_pte = pte_clear_flags(pte, _PAGE_PRESENT);
         temp_pte = pte_set_flags(temp_pte, _PAGE_PROTNONE);
         set_pte(*ptepp, temp_pte);
-        my_flush_tlb_singlepage(address);
+        my_flush_tlb_singlepage(addr);
     }
 }
 
