@@ -45,4 +45,6 @@ int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock
 void store_nuked_address(struct nuke_info_t **head, uint64_t address);
 void clean_up_stored_addresses(struct nuke_info_t **head);
 
+#define RESERVED_BIT (1UL<<50)
+
 #endif

