@@ -303,7 +303,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					// Ensure the special page faults at its next access
 					if (fault_cnt == 1) {
-                        pr_info("The model should fault again after this\n");
+						pr_info("The model should fault again after this\n");
 						arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
 					}
 

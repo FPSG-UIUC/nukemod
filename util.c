@@ -92,13 +92,13 @@ int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock
 
 	pgd = pgd_offset(mm, address);
 	if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd))) {
-		pr_info("do_page_walk: pgd_offset failed");
+		pr_info("do_page_walk: pgd_offset failed\n");
 		goto out;
 	}
 
 	pud = pud_offset(pgd, address);
 	if (pud_none(*pud) || unlikely(pud_bad(*pud))) {
-		pr_info("do_page_walk: pud_offset failed");
+		pr_info("do_page_walk: pud_offset failed\n");
 		goto out;
 	}
 
@@ -106,22 +106,22 @@ int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock
 	VM_BUG_ON(pmd_trans_huge(*pmd)); // We do not handle huge pages for now
 
     if (!pmd_none(*pmd) && (pmd_val(*pmd) & (_PAGE_PRESENT|_PAGE_PSE)) != _PAGE_PRESENT) {
-		pr_info("HUGE :(");
+		pr_info("HUGE PAGE!\n");
 	}
-	
+
 	if (pmd_none(*pmd) || unlikely(pmd_bad(*pmd))) {
-		pr_info("do_page_walk: pmd_offset failed");
+		pr_info("do_page_walk: pmd_offset failed\n");
 		goto out;
 	}
 
 	*ptepp = pte_offset_map_lock(mm, pmd, address, ptlp);
 	if (!(*ptepp)) {
-		pr_info("do_page_walk: pte_offset_map_lock failed");
+		pr_info("do_page_walk: pte_offset_map_lock failed\n");
 		goto out;
 	}
 
 	if (!pte_present(**ptepp)) {
-		pr_info("do_page_walk: page is not present, aborting.");
+		pr_info("do_page_walk: page is not present, aborting.\n");
 		goto unlock;
 	}
 
