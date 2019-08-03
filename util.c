@@ -105,7 +105,7 @@ int do_page_walk(struct mm_struct *mm, uint64_t address, pte_t **ptepp, spinlock
 	pmd = pmd_offset(pud, address);
 	VM_BUG_ON(pmd_trans_huge(*pmd)); // We do not handle huge pages for now
 
-	if (pmd_huge(*pmd)) {
+    if (!pmd_none(*pmd) && (pmd_val(*pmd) & (_PAGE_PRESENT|_PAGE_PSE)) != _PAGE_PRESENT) {
 		pr_info("HUGE :(");
 	}
 	
