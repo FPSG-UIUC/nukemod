@@ -168,13 +168,13 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		spin_unlock(&lock_for_waiting);
 		
 		msleep(1000);	// wait for all threads to be launched
-		wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1)
+		wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1);
 		break;
 	
 	case JOIN:
 		pr_info("Called hijacked pthread join\n");
 		hijack_start = 1;	// when the first join happens, it means that all threads have been launched
-		wake_up(&precompute_wait);
+		wake_up(&waiting_wait_queue);
 
 		// If all threads have called join that means that only the hijacked thread remains
 		join_count += 1;	// indexes start from 1
@@ -185,11 +185,11 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 			
 			arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
 			resume_hijacked_thread = 1;
-			wake_up(&precompute_wait);
+			wake_up(&waiting_wait_queue);
 
 			// Now wait for one more iteration of that thread (until the model page fault)
 			// and then let this thread finish too.
-			wait_event_interruptible(waiting_wait_queue, last_iteration == 0)
+			wait_event_interruptible(waiting_wait_queue, last_iteration == 0);
 		}
         
         break;
@@ -353,11 +353,11 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					if (last_iteration == 0 && fault_cnt > 24) {
 						monitoring = 0;
 						hijack_done = 1;
-						wake_up(&precompute_wait);
+						wake_up(&waiting_wait_queue);
 						pr_info("Putting thread 0 to sleep and waking up other threads now\n");
 
 						// Wait until ready to resume
-						wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1)
+						wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1);
 					}
                 }
 
@@ -376,7 +376,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					if (last_iteration == 1) {
 						last_iteration = 0;
-						wake_up(&precompute_wait);
+						wake_up(&waiting_wait_queue);
 
 					} else {
 						// Ensure the stored addresses page fault at their next access
