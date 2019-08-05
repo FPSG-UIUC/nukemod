@@ -97,7 +97,7 @@ static int device_release(struct inode *inode, struct file *file)
 
 static int check_condition(int my_thread_id) {
 	if (hijack_done == 1) {	// finished hijack
-		pr_info("Magic batch to happened on last thread, thread %d released\n", my_thread_id);
+		pr_info("Magic batch to happened on last thread, releasing thread %d\n", my_thread_id);
 		return 1;
 	}
 	
@@ -169,6 +169,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		
 		msleep(1000);	// wait for all threads to be launched
 		wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1);
+		pr_info("I have been woken up!\n");
 		break;
 	
 	case JOIN:
