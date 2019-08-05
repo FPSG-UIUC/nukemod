@@ -165,14 +165,17 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 
 	case WAIT:
+		pid_t tid = current->pid;
+		pr_info("PID is: %d\n", tid);
+
 		spin_lock(&lock_for_waiting);
 		thread_count++;
 		my_thread_id = thread_count; // indexes start from 1
 		spin_unlock(&lock_for_waiting);
 
-		msleep(1000); // wait for all threads to be launched
-		wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1);
-		pr_info("I have been woken up!\n");
+		// msleep(1000); // wait for all threads to be launched
+		// wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1);
+		// pr_info("I have been woken up!\n");
 		break;
 
 	case JOIN:
@@ -305,7 +308,6 @@ static int check_kill_permission(int sig, struct siginfo *info,
 				 struct task_struct *t)
 {
 	struct pid *sid;
-	int error;
 
 	if (!valid_signal(sig))
 		return -EINVAL;
