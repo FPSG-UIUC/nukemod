@@ -230,7 +230,7 @@ long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl
 		device_write(file, (char *)ioctl_param, i, 0, WAIT);
 		break;
 	case IOCTL_JOIN:
-		device_write(file, (char *)ioctl_param, i, 0, WAIT);
+		device_write(file, (char *)ioctl_param, i, 0, JOIN);
 		break;
 	default:
 		break;
