@@ -146,7 +146,8 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 
 	case WAIT:
 		spin_lock(&lock_for_waiting);
-		my_thread_id = ++thread_count;	// indexes start from 1
+		thread_count++;
+		my_thread_id = thread_count;	// indexes start from 1
 		spin_unlock(&lock_for_waiting);
 		
 		msleep(1000);	// wait for all threads to be launched
@@ -164,6 +165,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 	
 	case JOIN:
+		pr_info("Called hijacked pthread join\n");
 		hijack_start = 1;	// when the first join happens, it means that all threads have been launched
 		join_count += 1;	// indexes start from 1
 
@@ -364,7 +366,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					if (last_iteration == 1) {
 						last_iteration = 0;
-						
+
 					} else {
 						// Ensure the stored addresses page fault at their next access
 						struct nuke_info_t *tmp = nuke_info_head;
