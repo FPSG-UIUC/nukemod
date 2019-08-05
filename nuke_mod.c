@@ -174,8 +174,12 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	
 	case JOIN:
 		pr_info("Called hijacked pthread join\n");
-		hijack_start = 1;	// when the first join happens, it means that all threads have been launched
-		wake_up(&waiting_wait_queue);
+		
+		// when the first join happens, it means that all threads have been launched
+		if (join_count == 0) {
+			hijack_start = 1;
+			wake_up(&waiting_wait_queue);
+		}
 
 		// If all threads have called join that means that only the hijacked thread remains
 		join_count += 1;	// indexes start from 1
