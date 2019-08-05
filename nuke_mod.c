@@ -40,7 +40,7 @@
 #include <linux/timer.h>
 #include <linux/types.h>
 #include <linux/wait.h>
-#include <linux/audit.h>
+#include <linux/security.h>
 
 #include "nuke_mod.h"
 #include "util.h"
@@ -269,6 +269,23 @@ struct file_operations Fops = {
 //---------------------------------------------------------------------------------------
 //endregion
 
+static int kill_ok_by_cred(struct task_struct *t)
+{
+	const struct cred *cred = current_cred();
+	const struct cred *tcred = __task_cred(t);
+
+	if (uid_eq(cred->euid, tcred->suid) ||
+	    uid_eq(cred->euid, tcred->uid)  ||
+	    uid_eq(cred->uid,  tcred->suid) ||
+	    uid_eq(cred->uid,  tcred->uid))
+		return 1;
+
+	if (ns_capable(tcred->user_ns, CAP_KILL))
+		return 1;
+
+	return 0;
+}
+
 static inline int is_si_special(const struct siginfo *info)
 {
 	return info <= SEND_SIG_FORCED;
@@ -295,10 +312,6 @@ static int check_kill_permission(int sig, struct siginfo *info,
 
 	if (!si_fromuser(info))
 		return 0;
-
-	error = audit_signal_info(sig, t); /* Let audit system see the signal */
-	if (error)
-		return error;
 
 	if (!same_thread_group(current, t) &&
 	    !kill_ok_by_cred(t)) {
