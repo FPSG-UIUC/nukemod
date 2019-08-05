@@ -15,6 +15,8 @@
 
 #define IOCTL_WAIT _IOR(MAJOR_NUM, 4, char *)
 
+#define IOCTL_JOIN _IOR(MAJOR_NUM, 5, char *)
+
 #define DEVICE_FILE_NAME "nuke_channel"
 #define DEVICE_FILE_NAME_PATH "/home/riccardo/nukemod/nuke_channel"
 
@@ -22,6 +24,7 @@ enum call_type { APPEND_ADDR,
 				 PASS_SPECIAL_ADDR,
 				 START_MONITORING,
 				 STOP_MONITORING,
-				 WAIT };
+				 WAIT,
+				 JOIN };
 
 #endif

