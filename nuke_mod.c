@@ -37,6 +37,7 @@
 #include <linux/timer.h>
 #include <linux/types.h>
 #include <linux/atomic.h>
+#include <linux/wait.h>
 #include <linux/delay.h>
 
 #include "nuke_mod.h"
@@ -65,6 +66,7 @@ static struct nuke_info_t *nuke_info_head = NULL;
 static uint8_t monitoring = 0, hijack_done = 0, hijack_start = 0, resume_hijacked_thread = 0, last_iteration = 0;
 static int thread_count = 0, join_count = 0;
 static DEFINE_SPINLOCK(lock_for_waiting);
+static DECLARE_WAIT_QUEUE_HEAD(waiting_wait_queue);
 
 //region IOCTL Functions
 //---------------------------------------------------------------------------------------
@@ -90,6 +92,21 @@ static int device_release(struct inode *inode, struct file *file)
 	Device_Open--;
 
 	module_put(THIS_MODULE);
+	return 0;
+}
+
+static int check_condition(int my_thread_id) {
+	if (hijack_done == 1) {	// finished hijack
+		pr_info("Magic batch to happened on last thread, thread %d released\n", my_thread_id);
+		return 1;
+	}
+	
+	if (hijack_start == 1 && my_thread_id == thread_count) {	// I am the thread to be hijacked
+		pr_info("Letting thread %d continue\n", my_thread_id);
+		hijack_start = 0;
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -151,25 +168,16 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		spin_unlock(&lock_for_waiting);
 		
 		msleep(1000);	// wait for all threads to be launched
-		while (1) {
-			if (hijack_done == 1) {	// finished hijack
-				pr_info("Magic batch to happened on last thread, thread %d released\n", my_thread_id);
-				break;
-			}
-			if (hijack_start == 1 && my_thread_id == thread_count) {	// I am the thread to be hijacked
-				pr_info("Letting thread %d continue\n", my_thread_id);
-				hijack_start = 0;
-				break;
-			}
-		}
+		wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1)
 		break;
 	
 	case JOIN:
 		pr_info("Called hijacked pthread join\n");
 		hijack_start = 1;	// when the first join happens, it means that all threads have been launched
-		join_count += 1;	// indexes start from 1
+		wake_up(&precompute_wait);
 
 		// If all threads have called join that means that only the hijacked thread remains
+		join_count += 1;	// indexes start from 1
 		if (join_count == thread_count) {
 			pr_info("n-1 threads finished. Resuming last thread for one more iteration\n");
 			last_iteration = 1;
@@ -177,10 +185,11 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 			
 			arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
 			resume_hijacked_thread = 1;
+			wake_up(&precompute_wait);
 
 			// Now wait for one more iteration of that thread (until the model page fault)
 			// and then let this thread finish too.
-			while (last_iteration == 1) {;}
+			wait_event_interruptible(waiting_wait_queue, last_iteration == 0)
 		}
         
         break;
@@ -344,10 +353,11 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					if (last_iteration == 0 && fault_cnt > 24) {
 						monitoring = 0;
 						hijack_done = 1;
+						wake_up(&precompute_wait);
 						pr_info("Putting thread 0 to sleep and waking up other threads now\n");
 
 						// Wait until ready to resume
-						while (resume_hijacked_thread == 0) {;}
+						wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1)
 					}
                 }
 
@@ -366,6 +376,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					if (last_iteration == 1) {
 						last_iteration = 0;
+						wake_up(&precompute_wait);
 
 					} else {
 						// Ensure the stored addresses page fault at their next access
