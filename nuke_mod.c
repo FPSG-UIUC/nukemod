@@ -12,6 +12,8 @@
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include <asm/uaccess.h>
+#include <linux/atomic.h>
+#include <linux/delay.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/hrtimer.h>
@@ -36,9 +38,7 @@
 #include <linux/syscalls.h>
 #include <linux/timer.h>
 #include <linux/types.h>
-#include <linux/atomic.h>
 #include <linux/wait.h>
-#include <linux/delay.h>
 
 #include "nuke_mod.h"
 #include "util.h"
@@ -47,11 +47,11 @@ MODULE_LICENSE("GPL v2");
 
 // Ioctl variables
 #define DEVICE_NAME "nuke_mod"
-#define BUF_LEN 80		// Size of ioctl input buffer
+#define BUF_LEN 80 // Size of ioctl input buffer
 static int Device_Open = 0;
 
 // Kprobe struct used to add code to the page fault handler
-// NOTE: notify_attack is actually a function we added to the 
+// NOTE: notify_attack is actually a function we added to the
 // kernel and that is why microscope requires a custom kernel.
 static struct kprobe kp = {
 	.symbol_name = "notify_attack",
@@ -95,13 +95,14 @@ static int device_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int check_condition(int my_thread_id) {
-	if (hijack_done == 1) {	// finished hijack
+static int check_condition(int my_thread_id)
+{
+	if (hijack_done == 1) { // finished hijack
 		pr_info("Magic batch to happened on last thread, releasing thread %d\n", my_thread_id);
 		return 1;
 	}
-	
-	if (hijack_start == 1 && my_thread_id == thread_count) {	// I am the thread to be hijacked
+
+	if (hijack_start == 1 && my_thread_id == 1) { // I am the thread to be hijacked
 		pr_info("Letting thread %d continue\n", my_thread_id);
 		hijack_start = 0;
 		return 1;
@@ -131,25 +132,25 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	// Note that setting the base to zero indicates that the base should be determined
 	// from the leading digits of write_str. The default is decimal, a leading '0'
 	// indicates octal, and a leading '0x' or '0X' indicates hexadecimal.
-    // (In this case I think we are sending the address as an integer base 10.)
+	// (In this case I think we are sending the address as an integer base 10.)
 	kstrtou64(write_str_ptr, 0, &address);
 
 	// Identify the requested ioctl call
 	switch (type) {
 	case APPEND_ADDR:
 		pr_info("Storing addr %p\n", (void *)address);
-        store_nuked_address(&nuke_info_head, address);
-        break;
-	
+		store_nuked_address(&nuke_info_head, address);
+		break;
+
 	case PASS_SPECIAL_ADDR:
 		pr_info("Storing special addr %p\n", (void *)address);
-        
+
 		special.nuke_virtual_addr = address;
 		special.nuke_mm = current->mm;
 		do_page_walk(special.nuke_mm, address, &(special.nuke_pte), &ptlp);
 
-        break;
-		
+		break;
+
 	case START_MONITORING:
 		pr_info("On the lookout for page faults of the stored addresses\n");
 		monitoring = 1;
@@ -164,17 +165,17 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	case WAIT:
 		spin_lock(&lock_for_waiting);
 		thread_count++;
-		my_thread_id = thread_count;	// indexes start from 1
+		my_thread_id = thread_count; // indexes start from 1
 		spin_unlock(&lock_for_waiting);
-		
-		msleep(1000);	// wait for all threads to be launched
+
+		msleep(1000); // wait for all threads to be launched
 		wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1);
 		pr_info("I have been woken up!\n");
 		break;
-	
+
 	case JOIN:
 		pr_info("Called hijacked pthread join\n");
-		
+
 		// when the first join happens, it means that all threads have been launched
 		if (join_count == 0) {
 			hijack_start = 1;
@@ -182,12 +183,12 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		}
 
 		// If all threads have called join that means that only the hijacked thread remains
-		join_count += 1;	// indexes start from 1
+		join_count += 1; // indexes start from 1
 		if (join_count == thread_count) {
 			pr_info("n-1 threads finished. Resuming last thread for one more iteration\n");
 			last_iteration = 1;
 			monitoring = 1;
-			
+
 			arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
 			resume_hijacked_thread = 1;
 			wake_up(&waiting_wait_queue);
@@ -196,8 +197,8 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 			// and then let this thread finish too.
 			wait_event_interruptible(waiting_wait_queue, last_iteration == 0);
 		}
-        
-        break;
+
+		break;
 
 	default:
 		break;
@@ -275,20 +276,20 @@ struct file_operations Fops = {
  */
 static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
 {
-    pte_t pte, temp_pte, *faulting_pte;
-    faulting_pte = (pte_t *) regs->di;
-    pte = *faulting_pte;
+	pte_t pte, temp_pte, *faulting_pte;
+	faulting_pte = (pte_t *)regs->di;
+	pte = *faulting_pte;
 
 	fault_fault_cnt++;
 	pr_info("fault-on-fault\n");
 
-    // Cancel this nuke
-	if(!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
-        temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
-        set_pte(faulting_pte, temp_pte);
-    }
+	// Cancel this nuke
+	if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
+		temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
+		set_pte(faulting_pte, temp_pte);
+	}
 
-    // Mark attack as off
+	// Mark attack as off
 	monitoring = 0;
 
 	// We let the kprobe handler to handle the page fault
@@ -301,12 +302,12 @@ static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
  */
 static int pre_handler(struct kprobe *p, struct pt_regs *regs) { return 0; }
 
-static int pte_in_list(uint64_t v0) 
+static int pte_in_list(uint64_t v0)
 {
 	// Loop over list of addresses
 	uint64_t v1;
 	struct nuke_info_t *tmp = nuke_info_head;
-	while(tmp != NULL) {
+	while (tmp != NULL) {
 
 		// Check if tmp is the one we want
 		v1 = pte_pfn(*(tmp->nuke_pte));
@@ -314,7 +315,7 @@ static int pte_in_list(uint64_t v0)
 			return 1;
 		}
 
-        tmp = tmp->next;
+		tmp = tmp->next;
 	}
 
 	return 0;
@@ -323,9 +324,9 @@ static int pte_in_list(uint64_t v0)
 static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 {
 	uint64_t v0 = 0, v1 = 0;
-    pte_t pte, temp_pte, *faulting_pte;
-    faulting_pte = (pte_t *) regs->di;	// get arg from notify_attack
-    pte = *faulting_pte;
+	pte_t pte, temp_pte, *faulting_pte;
+	faulting_pte = (pte_t *)regs->di; // get arg from notify_attack
+	pte = *faulting_pte;
 
 	if (faulting_pte) {
 
@@ -334,19 +335,19 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 			// Check if the pte of the current page fault could be of interest
 			v0 = pte_pfn(*faulting_pte);
-            v1 = pte_pfn(*(special.nuke_pte));
+			v1 = pte_pfn(*(special.nuke_pte));
 			if (pte_in_list(v0) == 1) {
 
 				// Check if the pte of the current page fault is of the stored addresses
-                if(!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
+				if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
 
 					// Count fault
-                	fault_cnt++;
-                    pr_info("Stored address page fault %lld\n", fault_cnt);
+					fault_cnt++;
+					pr_info("Stored address page fault %lld\n", fault_cnt);
 
 					// Undo arbitrarily caused page fault
-                    temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
-                    set_pte(faulting_pte, temp_pte);
+					temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
+					set_pte(faulting_pte, temp_pte);
 
 					// Ensure the special page faults at its next access
 					if (fault_cnt == 1) {
@@ -362,37 +363,41 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 						pr_info("Putting thread 0 to sleep and waking up other threads now\n");
 
 						// Undo arbitrarily caused page fault for model
-						if(!(pte_flags(*(special.nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(special.nuke_pte)) & _PAGE_PROTNONE)) {
+						if (!(pte_flags(*(special.nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(special.nuke_pte)) & _PAGE_PROTNONE)) {
 							temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
 							set_pte(special.nuke_pte, temp_pte);
 						}
 
 						// Undo arbitrarily caused page fault for stored addresses
 						struct nuke_info_t *tmp = nuke_info_head;
-						while(tmp != NULL) {
-							if(!(pte_flags(*(tmp->nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(tmp->nuke_pte)) & _PAGE_PROTNONE)) {
+						while (tmp != NULL) {
+							if (!(pte_flags(*(tmp->nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(tmp->nuke_pte)) & _PAGE_PROTNONE)) {
 								temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
 								set_pte(tmp->nuke_pte, temp_pte);
 							}
 						}
 
 						// Wait until ready to resume
-						wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1);
+						// wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1);
+						//uint64_t junk = 0;
+						//for (junk = 0; junk < 494967295; junk++) {;}
+						//pr_info("Done sleeping\n");
+						msleep(3000);
 					}
-                }
+				}
 
-		    } else if (v0 == v1) {
-				
+			} else if (v0 == v1) {
+
 				// Check if the pte of the current page fault is of the special addresses
-                if(!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
+				if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
 
 					// Reset counter
 					fault_cnt = 0;
-                    pr_info("Model address page fault: resetting counter\n");
+					pr_info("Model address page fault: resetting counter\n");
 
 					// Undo arbitrarily caused page fault
-                    temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
-                    set_pte(faulting_pte, temp_pte);
+					temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
+					set_pte(faulting_pte, temp_pte);
 
 					if (last_iteration == 1) {
 						last_iteration = 0;
@@ -401,12 +406,12 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					} else {
 						// Ensure the stored addresses page fault at their next access
 						struct nuke_info_t *tmp = nuke_info_head;
-						while(tmp != NULL) {
+						while (tmp != NULL) {
 							arbitrarily_cause_page_fault(&(tmp->nuke_pte), tmp->nuke_virtual_addr);
 							tmp = tmp->next;
 						}
 					}
-                }
+				}
 			}
 		}
 	}
@@ -430,7 +435,7 @@ int init_module()
 	// Setup kprobes for notify_attack() in memory.c
 	kp.pre_handler = pre_handler;
 	kp.post_handler = post_handler;
-	kp.fault_handler = handler_fault;   // called if executing addr causes a fault (eg. page fault)
+	kp.fault_handler = handler_fault; // called if executing addr causes a fault (eg. page fault)
 
 	// Register kprobe
 	ret_val = register_kprobe(&kp);
