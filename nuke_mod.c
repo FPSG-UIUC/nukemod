@@ -124,6 +124,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	char *write_str_ptr;
 	spinlock_t *ptlp;
 	int my_thread_id;
+	pid_t tid;
 
 	// Store user space buffer variable (representing the address) into write_str
 	for (i = 0; i < length && i < BUF_LEN; i++)
@@ -165,7 +166,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 
 	case WAIT:
-		pid_t tid = current->pid;
+		tid = current->pid;
 		pr_info("PID is: %d\n", tid);
 
 		spin_lock(&lock_for_waiting);
@@ -271,111 +272,6 @@ struct file_operations Fops = {
 
 //---------------------------------------------------------------------------------------
 //endregion
-
-static int kill_ok_by_cred(struct task_struct *t)
-{
-	const struct cred *cred = current_cred();
-	const struct cred *tcred = __task_cred(t);
-
-	if (uid_eq(cred->euid, tcred->suid) ||
-	    uid_eq(cred->euid, tcred->uid)  ||
-	    uid_eq(cred->uid,  tcred->suid) ||
-	    uid_eq(cred->uid,  tcred->uid))
-		return 1;
-
-	if (ns_capable(tcred->user_ns, CAP_KILL))
-		return 1;
-
-	return 0;
-}
-
-static inline int is_si_special(const struct siginfo *info)
-{
-	return info <= SEND_SIG_FORCED;
-}
-
-static inline bool si_fromuser(const struct siginfo *info)
-{
-	return info == SEND_SIG_NOINFO ||
-		(!is_si_special(info) && SI_FROMUSER(info));
-}
-
-/*
- * Bad permissions for sending the signal
- * - the caller must hold the RCU read lock
- */
-static int check_kill_permission(int sig, struct siginfo *info,
-				 struct task_struct *t)
-{
-	struct pid *sid;
-
-	if (!valid_signal(sig))
-		return -EINVAL;
-
-	if (!si_fromuser(info))
-		return 0;
-
-	if (!same_thread_group(current, t) &&
-	    !kill_ok_by_cred(t)) {
-		switch (sig) {
-		case SIGCONT:
-			sid = task_session(t);
-			/*
-			 * We don't return the error if sid == NULL. The
-			 * task was unhashed, the caller must notice this.
-			 */
-			if (!sid || sid == task_session(current))
-				break;
-		default:
-			return -EPERM;
-		}
-	}
-
-	return security_task_kill(t, info, sig, 0);
-}
-
-static int
-do_send_specific(pid_t tgid, pid_t pid, int sig, struct siginfo *info)
-{
-	struct task_struct *p;
-	int error = -ESRCH;
-
-	rcu_read_lock();
-	p = find_task_by_vpid(pid);
-	if (p && (tgid <= 0 || task_tgid_vnr(p) == tgid)) {
-		error = check_kill_permission(sig, info, p);
-		/*
-		 * The null signal is a permissions and process existence
-		 * probe.  No signal is actually delivered.
-		 */
-		if (!error && sig) {
-			error = do_send_sig_info(sig, info, p, false);
-			/*
-			 * If lock_task_sighand() failed we pretend the task
-			 * dies after receiving the signal. The window is tiny,
-			 * and the signal is private anyway.
-			 */
-			if (unlikely(error == -ESRCH))
-				error = 0;
-		}
-	}
-	rcu_read_unlock();
-
-	return error;
-}
-
-static int do_tkill(pid_t tgid, pid_t pid, int sig)
-{
-	struct siginfo info = {};
-
-	info.si_signo = sig;
-	info.si_errno = 0;
-	info.si_code = SI_TKILL;
-	info.si_pid = task_tgid_vnr(current);
-	info.si_uid = from_kuid_munged(current_user_ns(), current_uid());
-
-	return do_send_specific(tgid, pid, sig, &info);
-}
 
 /*
  * handler_fault is invoked in the case of a nested page fault while we were
