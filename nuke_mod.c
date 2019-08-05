@@ -364,14 +364,14 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					if (last_iteration == 1) {
 						last_iteration = 0;
-						break;
-					}
-
-					// Ensure the stored addresses page fault at their next access
-					struct nuke_info_t *tmp = nuke_info_head;
-					while(tmp != NULL) {
-						arbitrarily_cause_page_fault(&(tmp->nuke_pte), tmp->nuke_virtual_addr);
-						tmp = tmp->next;
+						
+					} else {
+						// Ensure the stored addresses page fault at their next access
+						struct nuke_info_t *tmp = nuke_info_head;
+						while(tmp != NULL) {
+							arbitrarily_cause_page_fault(&(tmp->nuke_pte), tmp->nuke_virtual_addr);
+							tmp = tmp->next;
+						}
 					}
                 }
 			}
