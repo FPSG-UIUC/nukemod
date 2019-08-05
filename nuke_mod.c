@@ -103,6 +103,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	char write_str[BUF_LEN];
 	char *write_str_ptr;
 	spinlock_t *ptlp;
+	int my_thread_id;
 
 	// Store user space buffer variable (representing the address) into write_str
 	for (i = 0; i < length && i < BUF_LEN; i++)
@@ -144,7 +145,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 
 	case WAIT:
-		int my_thread_id;
 		spin_lock(&lock_for_waiting);
 		my_thread_id = ++thread_count;	// indexes start from 1
 		spin_unlock(&lock_for_waiting);
