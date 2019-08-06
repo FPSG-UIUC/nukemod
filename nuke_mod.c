@@ -399,6 +399,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					set_pte(faulting_pte, temp_pte);
 
 					if (last_iteration == 1) {
+						pr_info("Last iteration done\n");
 						last_iteration = 0;
 						wake_up(&waiting_wait_queue);
 
