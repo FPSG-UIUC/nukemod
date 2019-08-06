@@ -179,6 +179,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 			// Now wait for one more iteration of that thread (until the model page fault)
 			// and then let this thread finish too.
 			wait_event_interruptible(waiting_wait_queue, last_iteration == 0);
+			pr_info("The last iteration has been done. We can proceed killing the last thread.\n");
 		}
 
 		break;
