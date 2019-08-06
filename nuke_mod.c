@@ -77,7 +77,7 @@ static uint8_t halted = 0;
 #define SIG_RICCARDO 44
 
 static struct task_struct *sig_tsk = NULL;
-static int sig_tosend = SIG_RICCARDO;
+static int sig_tosend = SIGTERM;
 
 //region IOCTL Functions
 //---------------------------------------------------------------------------------------
