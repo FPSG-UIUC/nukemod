@@ -340,10 +340,10 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					// Halt this thread
 					if (halted < 2 && counter[0] && counter[1] && counter[2] && tid < max_pid) {
-						pr_info("Halting one thread\n");
+						pr_info("Halting thread %d\n", tid);
 						halted += 1;
 						wait_event_interruptible(waiting_wait_queue, hijack_done == 1);
-						pr_info("I have been woken up!\n");
+						pr_info("%tid been woken up!\n", tid);
 					}
 
 					// Check threshold
