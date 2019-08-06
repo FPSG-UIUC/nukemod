@@ -363,7 +363,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
 
 					// Halt this thread
-					if (halted < 2 && counter[1] && counter[2] && counter[3]) {
+					if (halted < 2 && counter[0] && counter[1] && counter[2]) {
 						pr_info("Halting thread\n");
 						halted += 1;
 						msleep(18000);
