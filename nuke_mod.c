@@ -419,6 +419,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					if (last_iteration == 1) {
 						pr_info("Last iteration done\n");
+						monitoring = 0;
 
 						// Undo arbitrarily caused page fault for model
 						if (!(pte_flags(*(special.nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(special.nuke_pte)) & _PAGE_PROTNONE)) {
@@ -436,9 +437,8 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 							tmp = tmp->next;
 						}
-
-						monitoring = 0;
 						
+						// Send the signal that will kill me immediately after this last iteration
 						int retval = send_sig(sig_tosend, sig_tsk, 0);
 						pr_info("Sent SIGNAL with retval = %d\n", retval);
 
