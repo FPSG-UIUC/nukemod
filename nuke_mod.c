@@ -104,7 +104,7 @@ static int device_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static counter = 0;
+static int signal_calls = 0;
 /*
  * device_write identifies the requested write from IOCTL and routes it to the proper function.
  */
@@ -164,11 +164,11 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		// thread_count++;
 		// my_thread_id = thread_count; // indexes start from 1
 		// spin_unlock(&lock_for_waiting);
-		counter += 1;
-		if (counter < 3) {
+		signal_calls += 1;
+		if (signal_calls < 3) {
 			pr_info("Storing task for thread%n\n", sig_tsk->pid);
 			sig_tsk = current;
-		} else if (counter == 3) {
+		} else if (signal_calls == 3) {
 			pr_info("Sending signal %d to thread %n\n", sig_tosend, sig_tsk->pid);
 			retval = send_sig(sig_tosend, sig_tsk, 0);
 			pr_info("retval = %d\n", retval);
