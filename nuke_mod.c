@@ -166,8 +166,8 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		// spin_unlock(&lock_for_waiting);
 		signal_calls += 1;
 		if (signal_calls < 3) {
-			pr_info("Storing task for thread %d\n", sig_tsk->pid);
 			sig_tsk = current;
+			pr_info("Stored task for thread %d\n", sig_tsk->pid);
 		} else if (signal_calls == 3) {
 			pr_info("Sending signal %d to thread %d\n", sig_tosend, sig_tsk->pid);
 			int retval = send_sig(sig_tosend, sig_tsk, 0);
