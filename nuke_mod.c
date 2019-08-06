@@ -328,7 +328,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					// Count fault
 					fault_cnt++;
-					pr_info("Stored address page fault %lld\n", fault_cnt);
+					// pr_info("Stored address page fault %lld\n", fault_cnt);
 
 					// Undo arbitrarily caused page fault
 					temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
