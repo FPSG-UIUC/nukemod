@@ -422,7 +422,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 						last_iteration = 0;
 						monitoring = 0;
 						wake_up(&waiting_wait_queue);
-						msleep(1000);
+						msleep(500);
 
 					} else {
 						// Ensure the stored addresses page fault at their next access
