@@ -392,7 +392,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					// Reset counter
 					fault_cnt = 0;
-					pr_info("Model address page fault: resetting counter\n");
+					// pr_info("Model address page fault: resetting counter\n");
 
 					// Undo arbitrarily caused page fault
 					temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
