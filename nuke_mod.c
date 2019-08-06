@@ -74,6 +74,9 @@ static pid_t max_pid;
 static uint8_t counter[3];
 static uint8_t halted = 0;
 
+static struct task_struct *sig_tsk = NULL;
+static int sig_tosend = SIGKILL;
+
 //region IOCTL Functions
 //---------------------------------------------------------------------------------------
 
@@ -101,6 +104,7 @@ static int device_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static counter = 0;
 /*
  * device_write identifies the requested write from IOCTL and routes it to the proper function.
  */
@@ -155,11 +159,21 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		clean_up_stored_addresses(&nuke_info_head);
 		break;
 
-	case WAIT:	// unused now
+	case SIGNAL:	// unused now
 		spin_lock(&lock_for_waiting);
-		thread_count++;
-		my_thread_id = thread_count; // indexes start from 1
-		spin_unlock(&lock_for_waiting);
+		// thread_count++;
+		// my_thread_id = thread_count; // indexes start from 1
+		// spin_unlock(&lock_for_waiting);
+		counter += 1;
+		if (counter < 3) {
+			pr_info("Storing task for thread%n\n", sig_tsk->pid);
+			sig_tsk = current;
+		} else if (counter == 3) {
+			pr_info("Sending signal %d to thread %n\n", sig_tosend, sig_tsk->pid);
+			retval = send_sig(sig_tosend, sig_tsk, 0);
+			pr_info("retval = %d\n", retval);
+		}
+		spin_unlock(&lock_for_waiting)
 		break;
 
 	case JOIN:
@@ -225,8 +239,8 @@ long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl
 	case IOCTL_STOP_MONITORING:
 		device_write(file, (char *)ioctl_param, i, 0, STOP_MONITORING);
 		break;
-	case IOCTL_WAIT:
-		device_write(file, (char *)ioctl_param, i, 0, WAIT);
+	case IOCTL_SIGNAL:
+		device_write(file, (char *)ioctl_param, i, 0, SIGNAL);
 		break;
 	case IOCTL_JOIN:
 		device_write(file, (char *)ioctl_param, i, 0, JOIN);
@@ -387,8 +401,10 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 				if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
 
 					// Count thread
-					if (tid > max_pid)
+					if (tid > max_pid) {
 						max_pid = tid;
+						sig_tsk = current;
+					}
 					counter[tid % 3] += 1;
 
 					// Reset counter

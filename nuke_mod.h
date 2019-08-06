@@ -13,7 +13,7 @@
 
 #define IOCTL_STOP_MONITORING _IOR(MAJOR_NUM, 3, char *)
 
-#define IOCTL_WAIT _IOR(MAJOR_NUM, 4, char *)
+#define IOCTL_SIGNAL _IOR(MAJOR_NUM, 4, char *)
 
 #define IOCTL_JOIN _IOR(MAJOR_NUM, 5, char *)
 
@@ -24,7 +24,7 @@ enum call_type { APPEND_ADDR,
 				 PASS_SPECIAL_ADDR,
 				 START_MONITORING,
 				 STOP_MONITORING,
-				 WAIT,
+				 SIGNAL,
 				 JOIN };
 
 #endif
