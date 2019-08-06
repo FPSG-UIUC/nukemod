@@ -340,7 +340,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					// Halt this thread
 					if (halted < 2 && counter[0] && counter[1] && counter[2] && tid < max_pid) {
-						pr_info("Halting thread\n");
+						pr_info("Halting one thread\n");
 						halted += 1;
 						fault_cnt = 0;
 						wait_event_interruptible(waiting_wait_queue, hijack_done == 1);
@@ -348,11 +348,11 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					}
 
 					// Check threshold
-					if (last_iteration == 0 && fault_cnt > 24) {
+					if (halted == 2 && last_iteration == 0 && fault_cnt > 24) {
 						monitoring = 0;
 						hijack_done = 1;
 						wake_up(&waiting_wait_queue);
-						pr_info("Putting thread 0 to sleep and waking up other threads now\n");
+						pr_info("Thread hijacked, putting it to sleep and waking up other threads now\n");
 
 						// Undo arbitrarily caused page fault for model
 						if (!(pte_flags(*(special.nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(special.nuke_pte)) & _PAGE_PROTNONE)) {
