@@ -173,7 +173,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 			int retval = send_sig(sig_tosend, sig_tsk, 0);
 			pr_info("retval = %d\n", retval);
 		}
-		spin_unlock(&lock_for_waiting)
+		spin_unlock(&lock_for_waiting);
 		break;
 
 	case JOIN:
