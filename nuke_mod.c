@@ -364,12 +364,13 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					// Halt this thread
 					if (halted < 2 && counter[1] && counter[2] && counter[3]) {
+						pr_info("Halting thread\n");
 						halted += 1;
 						msleep(18000);
 					}
 
 					// Check threshold
-					if (last_iteration == 0 && fault_cnt > 24) {
+					if (0 && last_iteration == 0 && fault_cnt > 24) {
 						monitoring = 0;
 						hijack_done = 1;
 						wake_up(&waiting_wait_queue);
