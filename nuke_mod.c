@@ -69,6 +69,8 @@ static uint8_t monitoring = 0, hijack_done = 0, hijack_start = 0, resume_hijacke
 static int thread_count = 0, join_count = 0;
 static DEFINE_SPINLOCK(lock_for_waiting);
 static DECLARE_WAIT_QUEUE_HEAD(waiting_wait_queue);
+static uint8_t counter[3];
+static uint8_t halted = 0;
 
 //region IOCTL Functions
 //---------------------------------------------------------------------------------------
@@ -124,7 +126,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 	char *write_str_ptr;
 	spinlock_t *ptlp;
 	int my_thread_id;
-	pid_t tid;
 
 	// Store user space buffer variable (representing the address) into write_str
 	for (i = 0; i < length && i < BUF_LEN; i++)
@@ -152,6 +153,9 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		special.nuke_mm = current->mm;
 		do_page_walk(special.nuke_mm, address, &(special.nuke_pte), &ptlp);
 
+		for (i = 0; i < 3; i++)
+			counter[tid % 3] = 0;
+
 		break;
 
 	case START_MONITORING:
@@ -166,9 +170,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		break;
 
 	case WAIT:
-		tid = current->pid;
-		pr_info("PID is: %d\n", tid);
-
 		spin_lock(&lock_for_waiting);
 		thread_count++;
 		my_thread_id = thread_count; // indexes start from 1
@@ -329,10 +330,12 @@ static int pte_in_list(uint64_t v0)
 
 static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 {
+	int i;
 	uint64_t v0 = 0, v1 = 0;
 	pte_t pte, temp_pte, *faulting_pte;
 	faulting_pte = (pte_t *)regs->di; // get arg from notify_attack
 	pte = *faulting_pte;
+	pid_t tid;
 
 	if (faulting_pte) {
 
@@ -356,9 +359,13 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					set_pte(faulting_pte, temp_pte);
 
 					// Ensure the special page faults at its next access
-					if (fault_cnt == 1) {
-						pr_info("The model should fault again after this\n");
-						arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
+					pr_info("The model should fault again after this\n");
+					arbitrarily_cause_page_fault(&(special.nuke_pte), special.nuke_virtual_addr);
+
+					// Halt this thread
+					if (halted < 2 && counter[1] && counter[2] && counter[3]) {
+						halted += 1;
+						msleep(18000);
 					}
 
 					// Check threshold
@@ -398,6 +405,10 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 				// Check if the pte of the current page fault is of the special addresses
 				if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
+
+					// Count thread
+					tid = current->pid;
+					counter[tid % 3] += 1;
 
 					// Reset counter
 					fault_cnt = 0;
