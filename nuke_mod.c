@@ -344,7 +344,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 						pr_info("Halting thread %d\n", tid);
 						halted += 1;
 						wait_event_interruptible(waiting_wait_queue, hijack_done == 1);
-						pr_info("%d been woken up!\n", tid);
+						pr_info("%d has been woken up!\n", tid);
 					}
 
 					// Check threshold
