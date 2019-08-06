@@ -74,8 +74,10 @@ static pid_t max_pid;
 static uint8_t counter[3];
 static uint8_t halted = 0;
 
+#define SIG_RICCARDO 44
+
 static struct task_struct *sig_tsk = NULL;
-static int sig_tosend = SIGKILL;
+static int sig_tosend = SIG_RICCARDO;
 
 //region IOCTL Functions
 //---------------------------------------------------------------------------------------
@@ -159,7 +161,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		clean_up_stored_addresses(&nuke_info_head);
 		break;
 
-	case SIGNAL:	// unused now
+	case SIGNAL:	// unused now -- ignore this code
 		spin_lock(&lock_for_waiting);
 		// thread_count++;
 		// my_thread_id = thread_count; // indexes start from 1
@@ -192,8 +194,8 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 
 			// Now wait for one more iteration of that thread (until the model page fault)
 			// and then let this thread finish too.
-			wait_event_interruptible(waiting_wait_queue, last_iteration == 0);
-			pr_info("The last iteration has been done. We can proceed killing the last thread.\n");
+			//wait_event_interruptible(waiting_wait_queue, last_iteration == 0);
+			//pr_info("The last iteration has been done. We can proceed killing the last thread.\n");
 		}
 
 		break;
@@ -435,10 +437,10 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 							tmp = tmp->next;
 						}
 
-						last_iteration = 0;
 						monitoring = 0;
-						wake_up(&waiting_wait_queue);
-						msleep(500);
+						
+						int retval = send_sig(sig_tosend, sig_tsk, 0);
+						pr_info("Sent SIGNAL with retval = %d\n", retval);
 
 					} else {
 						// Ensure the stored addresses page fault at their next access
