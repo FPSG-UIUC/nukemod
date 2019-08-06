@@ -401,7 +401,26 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 
 					if (last_iteration == 1) {
 						pr_info("Last iteration done\n");
+
+						// Undo arbitrarily caused page fault for model
+						if (!(pte_flags(*(special.nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(special.nuke_pte)) & _PAGE_PROTNONE)) {
+							temp_pte = pte_set_flags(*(special.nuke_pte), _PAGE_PRESENT);
+							set_pte(special.nuke_pte, temp_pte);
+						}
+
+						// Undo arbitrarily caused page fault for stored addresses
+						struct nuke_info_t *tmp = nuke_info_head;
+						while (tmp != NULL) {
+							if (!(pte_flags(*(tmp->nuke_pte)) & _PAGE_PRESENT) && (pte_flags(*(tmp->nuke_pte)) & _PAGE_PROTNONE)) {
+								temp_pte = pte_set_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
+								set_pte(tmp->nuke_pte, temp_pte);
+							}
+
+							tmp = tmp->next;
+						}
+
 						last_iteration = 0;
+						monitoring = 0;
 						wake_up(&waiting_wait_queue);
 
 					} else {
