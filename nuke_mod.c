@@ -154,7 +154,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 		do_page_walk(special.nuke_mm, address, &(special.nuke_pte), &ptlp);
 
 		for (i = 0; i < 3; i++)
-			counter[tid % 3] = 0;
+			counter[i] = 0;
 
 		break;
 
