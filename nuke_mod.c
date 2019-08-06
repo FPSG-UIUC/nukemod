@@ -310,7 +310,7 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 	int i;
 	uint64_t v0 = 0, v1 = 0;
 	pte_t pte, temp_pte, *faulting_pte;
-	faulting_pte = (pte_t *)regs->di; // get arg from notify_attack
+	faulting_pte = (pte_t *)regs->di; // get arg from notify_attack (second arg is si)
 	pte = *faulting_pte;
 	pid_t tid = current->pid;
 
