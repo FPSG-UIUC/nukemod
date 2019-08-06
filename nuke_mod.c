@@ -342,13 +342,12 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 					if (halted < 2 && counter[0] && counter[1] && counter[2] && tid < max_pid) {
 						pr_info("Halting one thread\n");
 						halted += 1;
-						fault_cnt = 0;
 						wait_event_interruptible(waiting_wait_queue, hijack_done == 1);
 						pr_info("I have been woken up!\n");
 					}
 
 					// Check threshold
-					if (halted == 2 && last_iteration == 0 && fault_cnt > 24) {
+					else if (halted == 2 && last_iteration == 0 && fault_cnt > 24) {
 						monitoring = 0;
 						hijack_done = 1;
 						wake_up(&waiting_wait_queue);
