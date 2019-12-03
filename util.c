@@ -64,7 +64,7 @@ void append(struct nuke_info_t **head, struct nuke_info_t *new_node)
 //---------------------------------------------------------------------------------------
 //endregion
 
-//region Microscope utility functions
+//region Nukemod utility functions
 //---------------------------------------------------------------------------------------
 
 static inline void my_flush_tlb_singlepage(unsigned long addr)

