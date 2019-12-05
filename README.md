@@ -4,7 +4,7 @@
 
 - _"Game of Threads: Enabling Asynchronous Poisoning Attacks"_ (__ASPLOS 2020__)
 
-In particular, this repository contains the kernel code used in the evaluation of the attack against our SGX proof-of-concept (c.f. Section 6 in the paper).
+In particular, this repository contains the kernel code used in the evaluation of the attack against our SGX proof-of-concept (cf. Section 6 in the paper).
 The full code artifact of the paper is available at:
 
 - https://github.com/jose-sv/hogwild_pytorch
