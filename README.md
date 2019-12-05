@@ -1,6 +1,6 @@
 # Overview
 
-`nukemod` is a kernel module that can be used to perform controlled side channel attacks (aka page-fault side-channel attacks) and to halt / resume user-space threads from the operating system. It is used in the paper:
+`nukemod` is a kernel module that can be used to perform controlled-channel attacks and to halt / resume user-space threads from the operating system. It is used in the paper:
 
 - _"Game of Threads: Enabling Asynchronous Poisoning Attacks"_ (__ASPLOS 2020__)
 
