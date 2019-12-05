@@ -1,0 +1,57 @@
+diff --git a/arch/x86/mm/fault.c b/arch/x86/mm/fault.c
+index eef44d9..b537a60 100644
+--- a/arch/x86/mm/fault.c
++++ b/arch/x86/mm/fault.c
+@@ -1281,7 +1281,7 @@ good_area:
+ 
+ 	check_v8086_mode(regs, address, tsk);
+ }
+-NOKPROBE_SYMBOL(__do_page_fault);
++//NOKPROBE_SYMBOL(__do_page_fault);
+ 
+ dotraplinkage void notrace
+ do_page_fault(struct pt_regs *regs, unsigned long error_code)
+@@ -1301,7 +1301,7 @@ do_page_fault(struct pt_regs *regs, unsigned long error_code)
+ 	__do_page_fault(regs, error_code, address);
+ 	exception_exit(prev_state);
+ }
+-NOKPROBE_SYMBOL(do_page_fault);
++//NOKPROBE_SYMBOL(do_page_fault);
+ 
+ #ifdef CONFIG_TRACING
+ static nokprobe_inline void
+@@ -1331,5 +1331,5 @@ trace_do_page_fault(struct pt_regs *regs, unsigned long error_code)
+ 	__do_page_fault(regs, error_code, address);
+ 	exception_exit(prev_state);
+ }
+-NOKPROBE_SYMBOL(trace_do_page_fault);
++//NOKPROBE_SYMBOL(trace_do_page_fault);
+ #endif /* CONFIG_TRACING */
+diff --git a/mm/memory.c b/mm/memory.c
+index c387430..4b5ed03 100644
+--- a/mm/memory.c
++++ b/mm/memory.c
+@@ -3253,6 +3253,14 @@ static int wp_huge_pmd(struct mm_struct *mm, struct vm_area_struct *vma,
+ 	return VM_FAULT_FALLBACK;
+ }
+ 
++pte_t *fault_pte;
++EXPORT_SYMBOL(fault_pte);
++
++static noinline void notify_attack(pte_t *curr_pte) {
++	fault_pte = curr_pte;
++}
++EXPORT_SYMBOL(notify_attack);
++
+ /*
+  * These routines also need to handle stuff like marking pages dirty
+  * and/or accessed for architectures that don't do it in hardware (most
+@@ -3276,6 +3284,8 @@ static int handle_pte_fault(struct mm_struct *mm,
+ 	pte_t entry;
+ 	spinlock_t *ptl;
+ 
++	notify_attack(pte);
++
+ 	/*
+ 	 * some architectures can have larger ptes than wordsize,
+ 	 * e.g.ppc44x-defconfig has CONFIG_PTE_64BIT=y and CONFIG_32BIT=y,

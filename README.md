@@ -1,14 +1,41 @@
-This is the kernel module used for the APA controlled side channel attack.
+# Overview
 
-# Usage
-- Before using this code, install this kernel https://bitbucket.org/ricpacca/kernel-for-nukemod.
-This can be done following the instructions in that repo.
+`nukemod` is a kernel module that can be used to perform controlled side channel attacks (aka page-fault side-channel attacks) and to halt / resume user-space threads from the operating system. It is used in the paper:
+
+- _"Game of Threads: Enabling Asynchronous Poisoning Attacks"_ (__ASPLOS 2020__)
+
+In particular, this repository contains the kernel code used in the evaluation of the attack against our SGX proof-of-concept (c.f. Section 6 in the paper).
+The full code artifact of the paper is available at:
+
+- https://github.com/jose-sv/hogwild_pytorch
+
+# Required Setup
+- Ubuntu 16.04 LTS
+
+# Prerequisites
+
+To monitor page-faults, `nukemod` hooks the page fault handler of the Linux kernel.
+However, this is not allowed by default in the Linux kernel.
+To circumvent this limitation, we minimally modified kernel 4.4.0-101.124 so that it allows to hook the page fault handler.
+Here are the instructions to patch and install this kernel.
+
+- Download Ubuntu kernel 4.4.0-101.124 from here:
+  - https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/linux/4.4.0-101.124/linux_4.4.0.orig.tar.gz
+- Extract the downloaded kernel into a directory `linux-4.4`.
+- Patch the extracted kernel using our provided kernel patch `4.4.0-101.124.patch`. To do this, `cd` into the directory `linux-4.4` and run `patch -p1 < ../4.4.0-101.124.patch`.
+- Compile and install the patched kernel. Instructions for this step are available in the README of the kernel itself. In short, you can run:
+```sh
+cp /boot/config-`uname -r` .config
+make -j `nproc` && sudo make modules_install && sudo make install
+```
 - After installing the custom kernel, make sure to add the kernel boot parameters `nosmap` `transparent_hugepage=never` to grub.
 This can be done by modifying a line in the file `/etc/default/grub`:
 ```sh
 GRUB_CMDLINE_LINUX_DEFAULT="nosmap transparent_hugepage=never"
 ```
-- Reboot your machine into the custom kernel (1) with the custom configuration (2).
+- Reboot your machine into the custom kernel with the custom configuration.
+
+# Usage
 - Compile this kernel module by running `make`.
 - (optional) Clear the message buffer of the kernel using `sudo dmesg --clear`.
 - Load this kernel module using `sudo insmod nuke.ko`. You can check if it loaded correctly by running `dmesg`.
