@@ -28,11 +28,12 @@ Here are the instructions to patch and install this kernel.
 cp /boot/config-`uname -r` .config
 make -j `nproc` && sudo make modules_install && sudo make install
 ```
-- After installing the custom kernel, make sure to add the kernel boot parameters `nosmap` `transparent_hugepage=never` to grub.
+- After installing the custom kernel, make sure to add the kernel boot parameters `nosmap` and `transparent_hugepage=never` to grub.
 This can be done by modifying a line in the file `/etc/default/grub`:
 ```sh
 GRUB_CMDLINE_LINUX_DEFAULT="nosmap transparent_hugepage=never"
 ```
+- Run `sudo update-grub` to apply the edits to the configuration.
 - Reboot your machine into the custom kernel with the custom configuration.
 
 # Usage
