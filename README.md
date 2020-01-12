@@ -37,9 +37,10 @@ GRUB_CMDLINE_LINUX_DEFAULT="nosmap transparent_hugepage=never"
 - Reboot your machine into the custom kernel with the custom configuration.
 
 # Usage
-- Compile this kernel module by running `make`.
+- Compile `nukemod` module by running `make`.
 - (optional) Clear the message buffer of the kernel using `sudo dmesg --clear`.
-- Load this kernel module using `sudo insmod nuke.ko`. You can check if it loaded correctly by running `dmesg`.
+- Create a device file for `nukemod` using `sudo mknod /dev/nuke_channel c 1315 0`.
+- Load `nukemod` using `sudo insmod nuke.ko`. You can check if it loaded correctly by running `dmesg`.
 - Now you can launch the user-space APA attack from this repo: https://github.com/jose-sv/sgx_scheduling.
 The user-space attack code will invoke the functions that are in this module.
 - (optional) You can see what the kernel module was doing during the attack using `dmesg`.

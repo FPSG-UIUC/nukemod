@@ -17,8 +17,7 @@
 
 #define IOCTL_JOIN _IOR(MAJOR_NUM, 5, char *)
 
-#define DEVICE_FILE_NAME "nuke_channel"
-#define DEVICE_FILE_NAME_PATH "/home/riccardo/nukemod/nuke_channel"
+#define DEVICE_FILE_NAME_PATH "/dev/nuke_channel"
 
 enum call_type { APPEND_ADDR,
 				 PASS_SPECIAL_ADDR,

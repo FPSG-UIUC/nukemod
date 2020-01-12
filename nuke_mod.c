@@ -487,7 +487,7 @@ int init_module()
 		return ret_val;
 	}
 
-	pr_info("Nuke module loaded. If a channel does not exist run: mknod %s c %d 0\n", DEVICE_FILE_NAME, MAJOR_NUM);
+	pr_info("Nuke module loaded. If a channel does not exist run: sudo mknod %s c %d 0\n", DEVICE_FILE_NAME_PATH, MAJOR_NUM);
 
 	return 0;
 }
