@@ -9,12 +9,12 @@ The full code artifact of the paper is available at:
 
 - https://github.com/jose-sv/hogwild_pytorch
 
+# Supported Hardware
+We tested this code on a bare-metal machine with an Intel i7-6700K CPU @ 4.00GHz.
+We cannot guarantee that it works on other CPUs or in virtualized environments.
+
 # Required Setup
 - Ubuntu 16.04 LTS
-
-# Supported Hardware
-We tested this code on an Intel i7-6700K CPU @ 4.00GHz.
-We cannot guarantee that it works on other CPUs.
 
 # Prerequisites
 To monitor page-faults, `nukemod` hooks the page fault handler of the Linux kernel.
