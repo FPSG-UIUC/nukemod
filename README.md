@@ -12,8 +12,11 @@ The full code artifact of the paper is available at:
 # Required Setup
 - Ubuntu 16.04 LTS
 
-# Prerequisites
+# Supported Hardware
+We tested this code on an Intel i7-6700K CPU @ 4.00GHz.
+We cannot guarantee that it works on other CPUs.
 
+# Prerequisites
 To monitor page-faults, `nukemod` hooks the page fault handler of the Linux kernel.
 However, this is not allowed by default in the Linux kernel.
 To circumvent this limitation, we minimally modified kernel 4.4.0-101.124 so that it allows to hook the page fault handler.
