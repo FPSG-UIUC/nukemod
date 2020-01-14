@@ -19,6 +19,7 @@ However, this is not allowed by default in the Linux kernel.
 To circumvent this limitation, we minimally modified kernel 4.4.0-101.124 so that it allows to hook the page fault handler.
 Here are the instructions to patch and install this kernel.
 
+- Install the required packages by running `sudo apt install -y build-essential ocaml automake autoconf libtool wget python libssl-dev bc`.
 - Download Ubuntu kernel 4.4.0-101.124 from here:
   - https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/linux/4.4.0-101.124/linux_4.4.0.orig.tar.gz
 - Extract the downloaded kernel into a directory `linux-4.4`.
